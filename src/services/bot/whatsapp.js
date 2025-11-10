@@ -30,6 +30,29 @@ function limparCacheAuth() {
     }
 }
 
+// Descobre caminho do Chromium em runtime (Alpine/DigitalOcean)
+function detectarChromiumPath() {
+    const candidatos = [
+        process.env.PUPPETEER_EXECUTABLE_PATH,
+        '/usr/bin/chromium-browser',
+        '/usr/bin/chromium',
+        '/usr/bin/google-chrome',
+        '/usr/bin/google-chrome-stable'
+    ].filter(Boolean);
+    for (const p of candidatos) {
+        try {
+            if (fs.existsSync(p)) {
+                console.log(`🧭 Chromium encontrado em: ${p}`);
+                return p;
+            }
+        } catch {}
+    }
+    console.warn('⚠️ Caminho do Chromium não encontrado nos candidatos padrão. Puppeteer tentará autodetectar.');
+    return undefined;
+}
+
+const chromiumPath = detectarChromiumPath();
+
 // Criação da única instância do cliente
 const client = new Client({
     authStrategy: new LocalAuth({
@@ -38,49 +61,20 @@ const client = new Client({
     }),
     puppeteer: {
         headless: true,
+        executablePath: chromiumPath,
         args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage',
-            '--disable-web-security',
-            '--disable-features=VizDisplayCompositor',
-            '--disable-background-timer-throttling',
-            '--disable-backgrounding-occluded-windows',
-            '--disable-renderer-backgrounding',
-            '--disable-extensions',
-            '--disable-plugins',
-            '--disable-default-apps',
-            '--disable-sync',
-            '--disable-translate',
-            '--hide-scrollbars',
-            '--mute-audio',
             '--no-first-run',
-            '--disable-gpu',
-            '--disable-software-rasterizer',
-            '--disable-background-networking',
-            '--disable-background-timer-throttling',
-            '--disable-client-side-phishing-detection',
-            '--disable-component-extensions-with-background-pages',
-            '--disable-domain-reliability',
-            '--disable-features=TranslateUI',
-            '--disable-hang-monitor',
-            '--disable-ipc-flooding-protection',
-            '--disable-popup-blocking',
-            '--disable-prompt-on-repost',
-            '--disable-web-resources',
-            '--enable-features=NetworkService,NetworkServiceLogging',
-            '--force-color-profile=srgb',
-            '--metrics-recording-only',
             '--no-default-browser-check',
-            '--no-pings',
-            '--password-store=basic',
-            '--use-mock-keychain',
-            '--single-process',
-            '--memory-pressure-off',
-            '--max_old_space_size=4096'
+            '--disable-gpu',
+            '--disable-extensions',
+            '--disable-background-networking',
+            '--mute-audio'
         ],
-        timeout: 60000,
-        protocolTimeout: 60000,
+        timeout: 120000,
+        protocolTimeout: 120000,
         ignoreDefaultArgs: ['--disable-extensions'],
         handleSIGINT: false,
         handleSIGTERM: false,
@@ -155,6 +149,10 @@ client.on('change_state', (state) => {
 // Evento para detectar quando o cliente está pronto para reconectar
 client.on('loading_screen', (percent, message) => {
     console.log(`📱 Carregando: ${percent}% - ${message}`);
+});
+
+client.on('error', (err) => {
+    console.error('❌ Erro no cliente WhatsApp:', err?.message || err);
 });
 
 // Evento de mensagem principal
