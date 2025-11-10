@@ -11,16 +11,109 @@ const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 const CALENDAR_ID = process.env.CALENDAR_ID;
 
 // Função para obter as credenciais (de variável de ambiente ou arquivo)
+function sanitizeAndParseGoogleCredentials(raw) {
+    const safeTrim = (s) => (s || '').trim();
+    const redact = (obj) => {
+        try {
+            const clone = { ...obj };
+            if (clone.private_key) clone.private_key = '[REDACTED]';
+            return clone;
+        } catch { return {}; }
+    };
+
+    let input = safeTrim(raw);
+
+    // Remove aspas encapsuladoras acidentais (", ' ou `) no começo/fim
+        if ((input.startsWith('"') && input.endsWith('"')) ||
+            (input.startsWith("'") && input.endsWith("'")) ||
+            (input.startsWith('`') && input.endsWith('`'))) {
+        input = input.slice(1, -1);
+    }
+
+    // 1) Tentativa direta de JSON
+    try {
+        const parsed = JSON.parse(input);
+        if (parsed && parsed.private_key && parsed.private_key.includes('\\n')) {
+            parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+        }
+        console.log('🔑 GOOGLE_CREDENTIALS (JSON) parseada com sucesso');
+        return parsed;
+    } catch {}
+
+    // 2) Base64 -> JSON
+    try {
+        const decoded = Buffer.from(input, 'base64').toString('utf8');
+        const parsed = JSON.parse(decoded);
+        if (parsed && parsed.private_key && parsed.private_key.includes('\\n')) {
+            parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+        }
+        console.log('🔑 GOOGLE_CREDENTIALS (base64) parseada com sucesso');
+        return parsed;
+    } catch {}
+
+    // 3) Formato key=value (várias linhas), comum quando colado de forma incorreta
+    // Ex.: type=service_account\nproject_id=...\nprivate_key=-----BEGIN PRIVATE KEY-----\n...
+    try {
+        if (/^[A-Za-z_]+\s*=/.test(input)) {
+            const obj = {};
+            input.split(/\r?\n/).forEach(line => {
+                const trimmed = line.trim();
+                if (!trimmed || trimmed.startsWith('#')) return;
+                const idx = trimmed.indexOf('=');
+                if (idx > 0) {
+                    const k = trimmed.slice(0, idx).trim();
+                    let v = trimmed.slice(idx + 1).trim();
+                    // Remove aspas externas, se existirem
+                    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith('\'') && v.endsWith('\''))) {
+                        v = v.slice(1, -1);
+                    }
+                    obj[k] = v;
+                }
+            });
+            if (obj.private_key && obj.private_key.includes('\\n')) {
+                obj.private_key = obj.private_key.replace(/\\n/g, '\n');
+            }
+            // Normaliza campos esperados pelo Google
+            const normalized = {
+                type: obj.type,
+                project_id: obj.project_id,
+                private_key_id: obj.private_key_id,
+                private_key: obj.private_key,
+                client_email: obj.client_email,
+                client_id: obj.client_id,
+                auth_uri: obj.auth_uri || 'https://accounts.google.com/o/oauth2/auth',
+                token_uri: obj.token_uri || 'https://oauth2.googleapis.com/token',
+                auth_provider_x509_cert_url: obj.auth_provider_x509_cert_url || 'https://www.googleapis.com/oauth2/v1/certs',
+                client_x509_cert_url: obj.client_x509_cert_url,
+                universe_domain: obj.universe_domain || 'googleapis.com'
+            };
+            console.log('🔑 GOOGLE_CREDENTIALS (key=value) parseada com sucesso');
+            return normalized;
+        }
+    } catch {}
+
+    // 4) Tentativa de reparar chaves não-aspadas: {type: '...', project_id: '...'} → JSON
+    try {
+        let repaired = input
+            .replace(/([,{\s])([A-Za-z0-9_]+)\s*:/g, '$1"$2":') // aspa chaves
+                .replace(/'([^']*)'/g, '"$1"'); // troca aspas simples por duplas em valores
+        const parsed = JSON.parse(repaired);
+        if (parsed && parsed.private_key && parsed.private_key.includes('\\n')) {
+            parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
+        }
+        console.log('🔑 GOOGLE_CREDENTIALS (reparada) parseada com sucesso');
+        return parsed;
+    } catch {}
+
+    console.error('❌ Falha ao interpretar GOOGLE_CREDENTIALS. Conteúdo inválido ou formato não reconhecido.');
+    throw new Error('GOOGLE_CREDENTIALS inválida - forneça JSON válido ou base64 do JSON');
+}
+
 function getCredentials() {
     // Tenta primeiro a variável de ambiente (para deploy em nuvem)
     if (process.env.GOOGLE_CREDENTIALS) {
         console.log('🔑 Usando credenciais da variável de ambiente GOOGLE_CREDENTIALS');
-        try {
-            return JSON.parse(process.env.GOOGLE_CREDENTIALS);
-        } catch (error) {
-            console.error('❌ Erro ao parsear GOOGLE_CREDENTIALS:', error);
-            throw new Error('GOOGLE_CREDENTIALS inválida - deve ser um JSON válido');
-        }
+        return sanitizeAndParseGoogleCredentials(process.env.GOOGLE_CREDENTIALS);
     }
     
     // Fallback para arquivo local
@@ -33,7 +126,12 @@ function getCredentials() {
         throw new Error('Credenciais do Google Calendar não encontradas');
     }
     
-    return JSON.parse(readFileSync(credentialsPath, 'utf8'));
+    const fileRaw = readFileSync(credentialsPath, 'utf8');
+    const creds = JSON.parse(fileRaw);
+    if (creds && creds.private_key && creds.private_key.includes('\\n')) {
+        creds.private_key = creds.private_key.replace(/\\n/g, '\n');
+    }
+    return creds;
 }
 
 async function getGoogleAuth() {
