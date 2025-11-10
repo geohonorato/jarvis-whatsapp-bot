@@ -33,3 +33,18 @@ const server = http.createServer((req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🩺 Health endpoint ouvindo em http://0.0.0.0:${PORT}`);
 });
+
+// Hardening: nunca derrubar o processo por exceções não tratadas
+process.on('uncaughtException', (err) => {
+  console.error('💥 uncaughtException:', err && (err.stack || err.message || err));
+});
+
+process.on('unhandledRejection', (reason) => {
+  console.error('💥 unhandledRejection:', reason && (reason.stack || reason.message || reason));
+});
+
+// Graceful shutdown (a App Platform pode enviar SIGTERM)
+process.on('SIGTERM', () => {
+  console.log('📴 Recebido SIGTERM, mantendo servidor vivo para desligamento gracioso...');
+  // Não chamamos process.exit aqui; deixamos a plataforma encerrar.
+});
