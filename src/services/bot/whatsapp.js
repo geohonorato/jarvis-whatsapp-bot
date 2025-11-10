@@ -116,9 +116,12 @@ client.on('auth_failure', msg => {
             });
         }, 5000); // Aguarda 5 segundos antes de tentar novamente
     } else {
-        console.error('❌ Máximo de tentativas de reconexão atingido. Limpando cache e reiniciando...');
-        limparCacheAuth();
-        process.exit(1);
+        console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
+        tentativasReconexao = 0;
+        setTimeout(() => {
+            try { limparCacheAuth(); } catch {}
+            client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
+        }, 10000);
     }
 });
 
@@ -135,9 +138,12 @@ client.on('disconnected', reason => {
             });
         }, 3000); // Aguarda 3 segundos antes de tentar novamente
     } else {
-        console.error('❌ Máximo de tentativas de reconexão atingido. Limpando cache e reiniciando...');
-        limparCacheAuth();
-        process.exit(1);
+        console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
+        tentativasReconexao = 0;
+        setTimeout(() => {
+            try { limparCacheAuth(); } catch {}
+            client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
+        }, 10000);
     }
 });
 
@@ -192,14 +198,29 @@ async function inicializarCliente() {
                             await client.initialize();
                         } catch (finalErr) {
                             console.error('❌ Falha final:', finalErr);
-                            process.exit(1);
+                            console.log('⏳ Mantendo processo vivo. Nova tentativa em 15s...');
+                            setTimeout(async () => {
+                                try {
+                                    limparCacheAuth();
+                                    await client.initialize();
+                                } catch (lastErr) {
+                                    console.error('❌ Nova tentativa também falhou:', lastErr);
+                                }
+                            }, 15000);
                         }
                     }, 3000);
                 }
             }, 3000);
         } else {
             console.error('❌ Erro não relacionado a contexto/protocolo:', err.message);
-            process.exit(1);
+            console.log('⏳ Mantendo processo vivo. Nova tentativa em 15s...');
+            setTimeout(async () => {
+                try {
+                    await client.initialize();
+                } catch (lastErr) {
+                    console.error('❌ Nova tentativa também falhou:', lastErr);
+                }
+            }, 15000);
         }
     }
 }
