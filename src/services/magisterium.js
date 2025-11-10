@@ -1,20 +1,25 @@
 require('dotenv').config();
-const { Magisterium } = require('magisterium');
 
 const MAGISTERIUM_API_KEY = process.env.MAGISTERIUM_API_KEY || '';
 
-let magisterium;
-try {
-    if (MAGISTERIUM_API_KEY) {
-        magisterium = new Magisterium({
-            apiKey: MAGISTERIUM_API_KEY,
-        });
-    } else {
-        console.warn('⚠️ Magisterium AI não inicializado (verifique MAGISTERIUM_API_KEY)');
+// Cliente será carregado dinamicamente pois o pacote é ESM
+let magisterium = null;
+async function getMagisteriumClient() {
+    try {
+        if (!MAGISTERIUM_API_KEY) {
+            console.warn('⚠️ Magisterium AI não inicializado (verifique MAGISTERIUM_API_KEY)');
+            return null;
+        }
+        if (magisterium) return magisterium;
+
+        const mod = await import('magisterium');
+        const MagisteriumClass = mod.Magisterium || mod.default || mod;
+        magisterium = new MagisteriumClass({ apiKey: MAGISTERIUM_API_KEY });
+        return magisterium;
+    } catch (e) {
+        console.error('❌ Erro ao importar/instanciar cliente Magisterium (ESM):', e?.message || e);
+        return null;
     }
-} catch (e) {
-    console.error('❌ Erro ao instanciar o cliente Magisterium:', e?.message || e);
-    magisterium = null;
 }
 
 
@@ -24,9 +29,10 @@ function gerarSystemMessageMagisterium() {
 
 async function responderMagisterium(parts, historico = []) {
   try {
-    if (!magisterium) {
-        return '❌ Serviço Magisterium AI não configurado. Verifique a variável de ambiente MAGISTERIUM_API_KEY.';
-    }
+        const client = await getMagisteriumClient();
+        if (!client) {
+            return '❌ Serviço Magisterium AI não configurado. Verifique a variável de ambiente MAGISTERIUM_API_KEY.';
+        }
 
     const messages = [];
     
@@ -49,7 +55,7 @@ async function responderMagisterium(parts, historico = []) {
         messages.push({ role: 'user', content: userContent });
     }
     
-    const results = await magisterium.chat.completions.create({
+    const results = await client.chat.completions.create({
         model: "magisterium-1",
         messages: messages,
     });
