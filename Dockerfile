@@ -19,11 +19,12 @@ ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
 # Define diretório de trabalho
 WORKDIR /app
 
-# Copia package.json e package-lock.json
+# Copia manifesto de dependências
 COPY package*.json ./
 
 # Instala dependências de produção
-RUN npm ci --only=production
+# Obs.: usamos `npm install --omit=dev` em vez de `npm ci` porque o repo não inclui package-lock.json
+RUN npm install --omit=dev --no-audit --no-fund
 
 # Copia o código da aplicação
 COPY . .
