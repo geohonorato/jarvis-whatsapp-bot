@@ -34,6 +34,11 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`🩺 Health endpoint ouvindo em http://0.0.0.0:${PORT}`);
 });
 
+// Heartbeat simples para observabilidade no App Platform
+setInterval(() => {
+  console.log(`💓 Heartbeat | uptime=${process.uptime().toFixed(0)}s | memory=${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
+}, 30000);
+
 // Hardening: nunca derrubar o processo por exceções não tratadas
 process.on('uncaughtException', (err) => {
   console.error('💥 uncaughtException:', err && (err.stack || err.message || err));
@@ -47,4 +52,13 @@ process.on('unhandledRejection', (reason) => {
 process.on('SIGTERM', () => {
   console.log('📴 Recebido SIGTERM, mantendo servidor vivo para desligamento gracioso...');
   // Não chamamos process.exit aqui; deixamos a plataforma encerrar.
+});
+
+// Diagnósticos de saída
+process.on('beforeExit', (code) => {
+  console.warn(`⚠️ beforeExit disparado com código ${code}`);
+});
+
+process.on('exit', (code) => {
+  console.warn(`⚠️ exit disparado com código ${code}`);
 });
