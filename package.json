@@ -1,0 +1,30 @@
+{
+  "name": "calendar-assistant",
+  "version": "1.0.0",
+  "main": "src/index.js",
+  "engines": {
+    "node": "18.x",
+    "npm": ">=9.0.0"
+  },
+  "scripts": {
+    "start": "node --no-deprecation src/index.js",
+    "dev": "nodemon src/index.js",
+    "limpar-cache": "node limpar-cache.js"
+  },
+  "dependencies": {
+    "@google-cloud/local-auth": "^3.0.1",
+    "@google/generative-ai": "^0.1.0",
+    "axios": "^1.13.1",
+    "dotenv": "^17.2.3",
+    "googleapis": "^164.1.0",
+    "magisterium": "^0.0.5",
+    "mime-types": "^3.0.1",
+    "moment-timezone": "^0.6.0",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.1",
+    "youtube-transcript": "^1.2.1"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
