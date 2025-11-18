@@ -10,6 +10,7 @@ const {
 const { responderMagisteriumComFormatacao } = require('../magisterium');
 const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
+const { hydrationHandlers, getOrCreateTracker } = require('../hydration-example');
 
 // Cache temporário para última imagem gerada (por chat)
 const ultimaImagemCache = {};
@@ -39,6 +40,37 @@ async function handleMessage(msg, client) {
         const chatId = msg.from;
         const lowerCaseBody = msg.body?.toLowerCase() || '';
         const hasText = !!msg.body; // Verifica se há texto na mensagem
+
+        // --- Verificação de Comandos de Hidratação ---
+        if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber') ||
+            lowerCaseBody.startsWith('/hidratação') || lowerCaseBody.startsWith('/hydration') ||
+            lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report') ||
+            lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
+            
+            try {
+                let resposta;
+                if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber')) {
+                    resposta = await hydrationHandlers.handleWaterCommand(msg.body, chatId);
+                } else if (lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report')) {
+                    resposta = hydrationHandlers.getDetailedReport(chatId);
+                } else if (lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
+                    const tracker = getOrCreateTracker(chatId);
+                    const lembrete = tracker.gerarLembrete();
+                    resposta = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
+                } else {
+                    resposta = hydrationHandlers.getStatusReport(chatId);
+                }
+                
+                adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+                adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
+                await client.sendMessage(chatId, resposta);
+                return; // Não processa como mensagem normal
+            } catch (error) {
+                console.error('❌ Erro ao processar comando de hidratação:', error);
+                await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
+                return;
+            }
+        }
 
         // --- Lógica de Estado para Remoção de Evento ---
         if (conversationState[chatId] && conversationState[chatId].action === 'awaiting_delete_selection') {

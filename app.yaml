@@ -1,0 +1,26 @@
+name: jarvis-whatsapp-bot
+services:
+- name: jarvis-whatsapp-bot
+  github:
+    repo: geohonorato/jarvis-whatsapp-bot
+    branch: main
+    deploy_on_push: true
+  build_command: npm install --omit=dev
+  run_command: npm start
+  http_port: 3000
+  instance_count: 1
+  instance_size_slug: basic-xs
+  envs:
+  - key: NODE_ENV
+    value: production
+    scope: RUN_AND_BUILD_TIME
+  - key: TZ
+    value: America/Sao_Paulo
+    scope: RUN_TIME
+  health_check:
+    http_path: /health
+  volumes:
+  - name: whatsapp-auth
+    mount_path: /app/.wwebjs_auth
+    filesystem_type: ext4
+    size_gib: 1
