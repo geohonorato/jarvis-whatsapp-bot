@@ -17,6 +17,10 @@ const {
     retomarLembretesHidratacao,
     getStatusLembretes
 } = require('../hydration-reminders');
+const {
+    handleBottleCommand,
+    detectAndProcessBottleIntent
+} = require('../hydration-bottle-handlers');
 
 // Cache temporário para última imagem gerada (por chat)
 const ultimaImagemCache = {};
@@ -111,6 +115,49 @@ async function handleMessage(msg, client) {
             adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
             await client.sendMessage(chatId, resposta);
             return;
+        }
+
+        // --- Verificação de Comandos de GARRAFA ---
+        // Detecta padrões: "garrafa cheia", "bebida 50%", "tamanho 750", "nome Térmica", etc
+        if (lowerCaseBody.includes('garrafa') || lowerCaseBody.includes('bebida') ||
+            lowerCaseBody.includes('tamanho') || lowerCaseBody.includes('nome') ||
+            lowerCaseBody.includes('terminei') || lowerCaseBody.includes('relatorio')) {
+            
+            try {
+                // Tenta processar como comando de garrafa
+                let respostaGarrafa = await handleBottleCommand(msg.body, chatId);
+                
+                if (respostaGarrafa) {
+                    // Se foi um comando de garrafa válido
+                    adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+                    adicionarAoHistorico(chatId, 'model', [{ text: respostaGarrafa }]);
+                    
+                    // Inicia lembretes
+                    iniciarLembretesHidratacao(client, chatId);
+                    
+                    await client.sendMessage(chatId, respostaGarrafa);
+                    return;
+                }
+                
+                // Se não foi reconhecido como comando de garrafa, tenta detecção de intent natural
+                respostaGarrafa = await detectAndProcessBottleIntent(msg.body, chatId);
+                
+                if (respostaGarrafa) {
+                    // Se detectou intenção de garrafa em linguagem natural
+                    adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+                    adicionarAoHistorico(chatId, 'model', [{ text: respostaGarrafa }]);
+                    
+                    // Inicia lembretes
+                    iniciarLembretesHidratacao(client, chatId);
+                    
+                    await client.sendMessage(chatId, respostaGarrafa);
+                    return;
+                }
+                // Se não foi garrafa, continua para próximas verificações
+            } catch (error) {
+                console.error('❌ Erro ao processar comando de garrafa:', error);
+                // Não interrompe, continua processamento
+            }
         }
 
         // --- Lógica de Estado para Remoção de Evento ---
