@@ -347,7 +347,8 @@ MIT License - veja LICENSE.md
 
 **Geovanni Honorato**
 - GitHub: [@geohonorato](https://github.com/geohonorato)
-- Email: geovanni@example.com
+- Email: geohonorato234@gmail.com
+- Instagram: @geovannihonorato
 
 ---
 
