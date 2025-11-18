@@ -11,6 +11,12 @@ const { responderMagisteriumComFormatacao } = require('../magisterium');
 const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
 const { hydrationHandlers, getOrCreateTracker } = require('../hydration-example');
+const {
+    iniciarLembretesHidratacao,
+    pausarLembretesHidratacao,
+    retomarLembretesHidratacao,
+    getStatusLembretes
+} = require('../hydration-reminders');
 
 // Cache temporário para última imagem gerada (por chat)
 const ultimaImagemCache = {};
@@ -51,6 +57,8 @@ async function handleMessage(msg, client) {
                 let resposta;
                 if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber')) {
                     resposta = await hydrationHandlers.handleWaterCommand(msg.body, chatId);
+                    // Inicia lembretes quando user começa a interagir com hidratação
+                    iniciarLembretesHidratacao(client, chatId);
                 } else if (lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report')) {
                     resposta = hydrationHandlers.getDetailedReport(chatId);
                 } else if (lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
@@ -70,6 +78,39 @@ async function handleMessage(msg, client) {
                 await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
                 return;
             }
+        }
+
+        // --- Comandos de Gerenciamento de Lembretes ---
+        if (lowerCaseBody === '/pausar lembretes' || lowerCaseBody === '/pausar' || 
+            lowerCaseBody === '/parar lembretes' || lowerCaseBody === '/desativar lembretes') {
+            pausarLembretesHidratacao(chatId);
+            const resposta = '⏸️ Lembretes de hidratação pausados. Diga "/retomar" para ativar novamente.';
+            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
+            await client.sendMessage(chatId, resposta);
+            return;
+        }
+
+        if (lowerCaseBody === '/retomar lembretes' || lowerCaseBody === '/retomar' || 
+            lowerCaseBody === '/reativar lembretes' || lowerCaseBody === '/ativar lembretes') {
+            retomarLembretesHidratacao(client, chatId);
+            const resposta = '▶️ Lembretes de hidratação retomados!';
+            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
+            await client.sendMessage(chatId, resposta);
+            return;
+        }
+
+        if (lowerCaseBody === '/status lembretes' || lowerCaseBody === '/status' || 
+            lowerCaseBody === '/quando' || lowerCaseBody === '/próximo') {
+            const status = getStatusLembretes(chatId);
+            const resposta = status.ativo 
+                ? `⏰ ${status.mensagem}` 
+                : `❌ ${status.mensagem}`;
+            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
+            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
+            await client.sendMessage(chatId, resposta);
+            return;
         }
 
         // --- Lógica de Estado para Remoção de Evento ---
