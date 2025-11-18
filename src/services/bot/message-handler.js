@@ -461,7 +461,43 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 const comandosCalendario = ['/add', '/list', '/remove', '/evento', '/today', '/tomorrow', '/week', '/nextweek', '/month', '/nextmonth', '/date', '/delete', '/next'];
                 const ehComandoCalendario = comandosCalendario.some(cmd => respostaIA.startsWith(cmd));
 
-                if (ehComandoCalendario) { 
+                // Verifica se a resposta é um comando de hidratação
+                const comandosHidratacao = ['/agua', '/beber', '/hidratação', '/hydration', '/relatorio', '/report', '/lembrete', '/remind'];
+                const ehComandoHidratacao = comandosHidratacao.some(cmd => respostaIA.toLowerCase().startsWith(cmd));
+
+                if (ehComandoHidratacao) {
+                    console.log('\n💧 Processando comando de hidratação gerado pela IA:', respostaIA);
+                    
+                    // Extrai o comando e a resposta adicional
+                    const primeiraLinha = respostaIA.split('\n')[0];
+                    const respostaSuplementar = respostaIA.split('\n').slice(1).join('\n').trim();
+                    
+                    try {
+                        let respostaHidratacao;
+                        if (primeiraLinha.toLowerCase().startsWith('/agua') || primeiraLinha.toLowerCase().startsWith('/beber')) {
+                            respostaHidratacao = await hydrationHandlers.handleWaterCommand(primeiraLinha, chatId);
+                        } else if (primeiraLinha.toLowerCase().startsWith('/relatorio') || primeiraLinha.toLowerCase().startsWith('/report')) {
+                            respostaHidratacao = hydrationHandlers.getDetailedReport(chatId);
+                        } else if (primeiraLinha.toLowerCase().startsWith('/lembrete') || primeiraLinha.toLowerCase().startsWith('/remind')) {
+                            const tracker = getOrCreateTracker(chatId);
+                            const lembrete = tracker.gerarLembrete();
+                            respostaHidratacao = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
+                        } else {
+                            respostaHidratacao = hydrationHandlers.getStatusReport(chatId);
+                        }
+                        
+                        // Se houver texto adicional (encorajamento, etc), adiciona
+                        const mensagemFinal = respostaSuplementar 
+                            ? `${respostaHidratacao}\n\n${respostaSuplementar}`
+                            : respostaHidratacao;
+                        
+                        await client.sendMessage(chatId, mensagemFinal);
+                        adicionarAoHistorico(chatId, 'model', [{ text: mensagemFinal }]);
+                    } catch (error) {
+                        console.error('❌ Erro ao processar hidratação:', error);
+                        await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
+                    }
+                } else if (ehComandoCalendario) { 
                     const respostaCalendario = await processarComandoCalendario(client, respostaIA, chatId); // Passa a string diretamente
                     if (respostaCalendario) {
                         await client.sendMessage(chatId, respostaCalendario);
