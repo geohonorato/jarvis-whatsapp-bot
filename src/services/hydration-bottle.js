@@ -1,7 +1,8 @@
 /**
- * Sistema de rastreamento por garrafa
- * Foca em "quantas garrafas bebi" em vez de ml específicos
- * Aprende tamanho da garrafa e facilita registro
+ * Sistema de rastreamento de consumo de água em ML
+ * Aceita diferentes garrafas com diferentes tamanhos
+ * User fornece quantidade em ml direto
+ * Apenas referência visual da garrafa atual (não afeta cálculo)
  */
 
 const HydrationTracker = require('./hydration-tracker');
@@ -24,14 +25,12 @@ class BottleTracker {
         this.userId = userId;
         this.mainTracker = new HydrationTracker(userId);
         
-        // Configuração de garrafa
+        // Configuração de garrafa (apenas referência, não afeta cálculo)
         this.bottle = {
-            size: 500, // ml (padrão)
-            name: 'Minha Garrafa', // nome customizável
-            refillsToday: 0, // quantas vezes terminou a garrafa
-            currentRefill: 0, // consumo na garrafa atual (0-100%)
-            lastRefillTime: new Date().toISOString(),
-            history: [] // histórico de garrafas {'time': ISO, 'size': ml}
+            size: 500, // ml (apenas informativa)
+            name: 'Garrafa 1', // nome customizável
+            lastChangeTime: new Date().toISOString(),
+            history: [] // histórico de mudanças de garrafas {'time': ISO, 'size': ml, 'name': str}
         };
 
         this.loadBottleConfig();
@@ -44,19 +43,11 @@ class BottleTracker {
         try {
             const dataFile = this.mainTracker.dataFile;
             const fs = require('fs');
-            const path = require('path');
             
             if (fs.existsSync(dataFile)) {
                 const data = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
                 if (data.bottle) {
                     this.bottle = { ...this.bottle, ...data.bottle };
-                    
-                    // Se mudou de dia, reseta contador
-                    const lastRefillDate = new Date(this.bottle.lastRefillTime).toDateString();
-                    if (lastRefillDate !== new Date().toDateString()) {
-                        this.bottle.refillsToday = 0;
-                        this.bottle.currentRefill = 0;
-                    }
                 }
             }
             this.saveBottleConfig();
@@ -86,86 +77,59 @@ class BottleTracker {
     }
 
     /**
-     * Registra que terminou a garrafa (bebeu tudo)
-     * @param {number} sizeOverride - se quiser registrar tamanho diferente
+     * Registra consumo direto em ml
+     * @param {number} ml - quantidade em ml
      */
-    finishBottle(sizeOverride = null) {
-        const sizeRegistered = sizeOverride || this.bottle.size;
-        
-        // Registra no tracker principal
-        this.mainTracker.logWater(sizeRegistered, 'bottle');
-        
-        // Atualiza contagem de garrafas
-        this.bottle.refillsToday++;
-        this.bottle.currentRefill = 0; // Reset da garrafa atual
-        this.bottle.lastRefillTime = new Date().toISOString();
-        
-        // Adiciona ao histórico
-        this.bottle.history.push({
-            time: new Date().toISOString(),
-            size: sizeRegistered
-        });
-        
-        this.saveBottleConfig();
-        
-        console.log(`🍾 Garrafa completa! (+${sizeRegistered}ml) Total hoje: ${this.bottle.refillsToday} garrafas`);
-        
-        return this.getBottleStatus();
-    }
-
-    /**
-     * Registra consumo parcial (quando não terminou a garrafa)
-     * @param {number} percentage - quanto bebeu da garrafa (0-100)
-     */
-    sip(percentage = 50) {
-        // Percentual válido?
-        if (percentage < 0) percentage = 0;
-        if (percentage > 100) percentage = 100;
-        
-        // Se foi além de 100%, conta como garrafa completa
-        if (percentage >= 100) {
-            return this.finishBottle();
+    registerWater(ml) {
+        if (ml <= 0) {
+            return { error: '❌ Quantidade inválida! Use um valor maior que 0.' };
         }
         
-        // Apenas registra que está bebendo
-        this.bottle.currentRefill = percentage;
+        // Registra no tracker principal
+        this.mainTracker.logWater(ml, 'bottle');
         
-        // Registra no tracker como fração
-        const mlConsumido = Math.round((this.bottle.size * percentage) / 100);
-        this.mainTracker.logWater(mlConsumido, 'bottle');
-        
-        this.saveBottleConfig();
-        
-        console.log(`💧 Bebida registrada: ${percentage}% da garrafa (${mlConsumido}ml)`);
+        console.log(`💧 Consumo registrado: ${ml}ml`);
         
         return this.getBottleStatus();
     }
 
     /**
-     * Define novo tamanho de garrafa
+     * Troca para nova garrafa com novo tamanho
      */
-    setBottleSize(newSize) {
+    changeBottle(newSize, newName = null) {
         if (newSize <= 0) {
             return { error: '❌ Tamanho inválido! Use um valor maior que 0.' };
         }
         
         const oldSize = this.bottle.size;
+        const oldName = this.bottle.name;
+        
         this.bottle.size = newSize;
-        this.bottle.currentRefill = 0; // Reset da garrafa atual
+        this.bottle.name = newName || `Garrafa ${this.bottle.history.length + 1}`;
+        this.bottle.lastChangeTime = new Date().toISOString();
+        
+        // Adiciona ao histórico
+        this.bottle.history.push({
+            time: this.bottle.lastChangeTime,
+            size: newSize,
+            name: this.bottle.name
+        });
+        
         this.saveBottleConfig();
         
-        console.log(`✅ Tamanho da garrafa atualizado: ${oldSize}ml → ${newSize}ml`);
+        console.log(`✅ Garrafa trocada: ${oldSize}ml → ${newSize}ml (${oldName} → ${this.bottle.name})`);
         
         return {
             success: true,
-            message: `✅ Tamanho da garrafa atualizado para ${newSize}ml!`,
+            message: `✅ Garrafa atualizada para ${newSize}ml!`,
             oldSize,
-            newSize
+            newSize,
+            newName: this.bottle.name
         };
     }
 
     /**
-     * Define nome customizado da garrafa
+     * Define nome customizado da garrafa atual
      */
     setBottleName(name) {
         if (!name || name.trim().length === 0) {
@@ -176,60 +140,59 @@ class BottleTracker {
         this.bottle.name = name.trim();
         this.saveBottleConfig();
         
-        console.log(`✅ Nome da garrafa: ${oldName} → ${this.bottle.name}`);
+        console.log(`✅ Garrafa renomeada: ${oldName} → ${this.bottle.name}`);
         
         return {
             success: true,
             message: `✅ Garrafa renomeada para "${this.bottle.name}"!`,
-            oldName,
             newName: name
         };
     }
 
     /**
-     * Retorna status atual da garrafa
+     * Retorna status atual de hidratação
      */
     getBottleStatus() {
         const mainStatus = this.mainTracker.getStatus();
         
-        // Quantas garrafas completas = quantas vezes atingiu bottle.size
-        const bottlesComplete = this.bottle.refillsToday;
-        const garrafasEquivalentes = mainStatus.totalToday / this.bottle.size;
+        // Quantas garrafas do tamanho atual foram consumidas (aproximado)
+        const bottlesEquivalent = mainStatus.totalToday / this.bottle.size;
+        const fullBottles = Math.floor(bottlesEquivalent);
+        const partialBottle = (bottlesEquivalent - fullBottles) * 100;
         
-        // Progresso visual com garrafas
-        const fullBottles = Math.floor(garrafasEquivalentes);
-        const partialBottle = (garrafasEquivalentes - fullBottles) * 100;
-        
-        // Barra visual
-        let barraGarrafas = '';
-        for (let i = 0; i < fullBottles; i++) {
-            barraGarrafas += '🍾'; // garrafa cheia
+        // Barra visual de progresso
+        let barraProgresso = '';
+        for (let i = 0; i < Math.min(fullBottles, 10); i++) {
+            barraProgresso += '🍾'; // garrafas cheias
         }
-        if (partialBottle > 0) {
-            if (partialBottle >= 75) barraGarrafas += '🥃'; // quase cheia
-            else if (partialBottle >= 50) barraGarrafas += '🥤'; // meio cheia
-            else if (partialBottle >= 25) barraGarrafas += '💧'; // pouca
+        if (fullBottles > 10) {
+            barraProgresso += `...+${fullBottles - 10}`;
+        }
+        if (partialBottle > 0 && fullBottles < 10) {
+            if (partialBottle >= 75) barraProgresso += '🥃'; // quase cheia
+            else if (partialBottle >= 50) barraProgresso += '🥤'; // meio cheia
+            else if (partialBottle >= 25) barraProgresso += '💧'; // pouca
         }
         
         return {
-            // Dados da garrafa
+            // Dados de contexto da garrafa
             bottle: {
                 name: this.bottle.name,
                 size: this.bottle.size,
-                refillsToday: bottlesComplete,
-                currentPercentage: this.bottle.currentRefill,
-                visual: barraGarrafas || '(vazia)',
+                equivalentBottles: bottlesEquivalent.toFixed(1),
+                visual: barraProgresso || '(vazio)',
             },
             // Dados do rastreador principal
             hydration: mainStatus,
             
             // Mensagem combinada
-            summary: `🍾 *${this.bottle.name}* | ${bottlesComplete} garrafa${bottlesComplete !== 1 ? 's' : ''} completa${bottlesComplete !== 1 ? 's' : ''} (${mainStatus.totalToday}ml)
+            summary: `💧 *${this.bottle.name}* (${this.bottle.size}ml)
             
-${barraGarrafas || '(vazia)'}
+${barraProgresso || '(vazio)'}
 
-Meta: ${mainStatus.totalToday}/${mainStatus.dailyGoal}ml (${mainStatus.percentage}%)
-Faltam: ${mainStatus.remaining}ml`,
+Total: ${mainStatus.totalToday}ml / ${mainStatus.dailyGoal}ml (${mainStatus.percentage}%)
+Faltam: ${mainStatus.remaining}ml
+≈ ${(mainStatus.remaining / this.bottle.size).toFixed(1)} garrafas`,
             
             // Dados brutos
             totalMl: mainStatus.totalToday,
@@ -240,42 +203,36 @@ Faltam: ${mainStatus.remaining}ml`,
     }
 
     /**
-     * Gera relatório de garrafas
+     * Gera relatório detalhado
      */
     getBottleReport() {
         const status = this.getBottleStatus();
         
-        // Análise de garrafas por dia (do histórico)
-        const avgBottlesPerDay = this.bottle.history.length > 0 
-            ? (this.bottle.history.length / 1).toFixed(1) // aproximado
-            : 'N/A';
-        
-        // Tamanho mais comum registrado
-        const sizeMostCommon = this.bottle.history.length > 0
-            ? this.bottle.size
-            : 'N/A';
+        const historyStr = this.bottle.history.length > 0
+            ? this.bottle.history.map((h, i) => 
+                `${i + 1}. ${h.name} - ${h.size}ml (${new Date(h.time).toLocaleTimeString('pt-BR')})`
+            ).join('\n')
+            : 'Nenhuma mudança registrada';
         
         const report = `
-📊 *RELATÓRIO DE GARRAFAS*
+📊 *RELATÓRIO DE HIDRATAÇÃO*
 
-🍾 ${this.bottle.name}
-📏 Tamanho: ${this.bottle.size}ml
-🔄 Refills Hoje: ${this.bottle.refillsToday}
+💧 Garrafa Atual: ${this.bottle.name} (${this.bottle.size}ml)
 
 ${status.bottle.visual}
 
 Total: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)
-Faltam: ${status.remainingMl}ml
+Faltam: ${status.remainingMl}ml (≈ ${(status.remainingMl / this.bottle.size).toFixed(1)} garrafas)
 
-💡 Tamanho médio: ${sizeMostCommon}ml
-💡 Garrafas/dia: ${avgBottlesPerDay}
+📋 Histórico de Garrafas:
+${historyStr}
 `;
         
         return report;
     }
 
     /**
-     * Próximo lembrete adaptado para garrafas
+     * Próximo lembrete adaptado
      */
     getNextBottleReminder() {
         const mainReminder = this.mainTracker.calcularProximoLembrete();
@@ -283,12 +240,14 @@ Faltam: ${status.remainingMl}ml
             ? mainReminder.minutes 
             : mainReminder;
         
-        // Mensagens em contexto de garrafa
+        const status = this.getBottleStatus();
+        
+        // Mensagens em contexto de ml
         const messages = [
-            `🍾 Tempo de beber da sua ${this.bottle.name}!`,
-            `💧 Terminada sua ${this.bottle.name}? Diga "garrafa cheia"!`,
-            `🚰 Beba mais da ${this.bottle.name}! Faltam ${Math.round(this.getBottleStatus().remainingMl / this.bottle.size)} garrafas.`,
-            `⏰ Hora de hidratar! Quantos % da garrafa você bebeu?`,
+            `💧 Hora de beber! Quanto você quer registrar? (ex: "250ml", "500ml")`,
+            `🚰 Beba água! Faltam ${status.remainingMl}ml para a meta.`,
+            `⏰ Tempo de hidratar! Quantos ml você bebeu?`,
+            `🍾 Bora manter a hidratação? Registre seu consumo em ml!`,
         ];
         
         const message = messages[Math.floor(Math.random() * messages.length)];
@@ -296,19 +255,8 @@ Faltam: ${status.remainingMl}ml
         return {
             message,
             minutesToNext,
-            bottles: this.bottle.refillsToday,
             size: this.bottle.size
         };
-    }
-
-    /**
-     * Reset para novo dia
-     */
-    resetDay() {
-        this.bottle.refillsToday = 0;
-        this.bottle.currentRefill = 0;
-        this.bottle.lastRefillTime = new Date().toISOString();
-        this.saveBottleConfig();
     }
 }
 
