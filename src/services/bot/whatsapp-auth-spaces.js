@@ -157,28 +157,15 @@ async function salvarBackupCredenciais(authPath) {
             return false;
         }
 
-        // Cria um arquivo ZIP ou lista dos arquivos de autenticação
-        const files = fs.readdirSync(authPath, { recursive: true });
-        const authFiles = files.filter(f => 
-            f.includes('Default') || 
-            f.includes('bot-whatsapp') ||
-            f.includes('sessionData')
-        );
-
-        if (authFiles.length === 0) {
-            console.log('⚠️ Nenhum arquivo de autenticação encontrado');
-            return false;
-        }
-
-        // Cria um manifesto de backup
+        // Cria um manifesto simples de backup
         const backupManifest = {
             timestamp: Date.now(),
-            files: authFiles,
-            count: authFiles.length,
-            lastSync: new Date().toISOString()
+            authenticated: true,
+            lastSync: new Date().toISOString(),
+            authPath: authPath
         };
 
-        // Encripta e envia manifesto
+        // Encripta e envia manifesto (sem tentar ler arquivos individuais)
         const manifestJson = JSON.stringify(backupManifest, null, 2);
         const encrypted = encriptarDados(manifestJson);
 
@@ -195,12 +182,12 @@ async function salvarBackupCredenciais(authPath) {
         );
 
         if (success) {
-            console.log(`💾 Backup de autenticação salvo (${authFiles.length} arquivos)`);
+            console.log(`💾 Backup de autenticação salvo no Spaces`);
         }
 
         return success;
     } catch (error) {
-        console.error('❌ Erro ao salvar backup de credenciais:', error);
+        console.error('❌ Erro ao salvar backup de credenciais:', error.message);
         return false;
     }
 }
