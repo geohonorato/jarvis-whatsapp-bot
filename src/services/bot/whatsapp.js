@@ -9,13 +9,27 @@ const {
     salvarBackupCredenciais, 
     carregarBackupCredenciais, 
     monitorarMudancasAuth,
-    limparBackupsAntigos,
-    CREDENTIALS_BACKUP_PATH
-} = require('./whatsapp-auth-manager');
+    validarConfiguracao
+} = require('./whatsapp-auth-spaces');
 
 let qrGerado = false;
 let tentativasReconexao = 0;
 const maxTentativasReconexao = 3;
+
+// Valida configuração de DigitalOcean Spaces (se disponível)
+(async () => {
+    const spacesConfigurido = process.env.DO_SPACES_KEY && process.env.DO_SPACES_SECRET;
+    if (spacesConfigurido) {
+        console.log('🔄 Validando DigitalOcean Spaces...');
+        const valido = await validarConfiguracao();
+        if (!valido) {
+            console.error('⚠️ Spaces não será usado para persistência');
+        }
+    } else {
+        console.warn('⚠️ DigitalOcean Spaces não configurado - sessão será perdida em restart');
+        console.warn('   Configure DO_SPACES_KEY e DO_SPACES_SECRET para persistência');
+    }
+})();
 
 // Função para limpar cache de autenticação
 function limparCacheAuth() {
@@ -105,14 +119,14 @@ client.on('authenticated', () => {
     
     // Salva backup das credenciais logo após autenticação bem-sucedida
     const authPath = path.join(process.cwd(), '.wwebjs_auth');
-    salvarBackupCredenciais({
-        timestamp: Date.now(),
-        authenticated: true,
-        lastSync: new Date().toISOString()
-    });
     
-    // Inicia monitoramento para backup futuro
-    monitorarMudancasAuth(authPath);
+    // Se Spaces está configurado, faz backup
+    (async () => {
+        await salvarBackupCredenciais(authPath);
+    })();
+    
+    // Inicia monitoramento para backup futuro (a cada minuto)
+    monitorarMudancasAuth(authPath, 60000);
 });
 
 client.on('ready', () => {
