@@ -12,6 +12,7 @@ const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
 const { hydrationHandlers, getOrCreateTracker } = require('../hydration-example');
 const { getOrCreateBottleTracker } = require('../hydration-bottle');
+const { obterDadosHidratacao, registrarConsumo, obterStatusRapido } = require('../hydration-api');
 const {
     iniciarLembretesHidratacao,
     pausarLembretesHidratacao,
@@ -560,66 +561,72 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 const ehComandoCalendario = comandosCalendario.some(cmd => respostaIA.startsWith(cmd));
 
                 // Verifica se a resposta é um comando de hidratação
-                const comandosHidratacao = ['/agua', '/beber', '/hidratação', '/hydration', '/relatorio', '/report', '/lembrete', '/remind'];
+                const comandosHidratacao = ['/agua', '/beber', '/hidratacao', '/hydration', '/relatorio', '/report', '/lembrete', '/remind'];
                 const ehComandoHidratacao = comandosHidratacao.some(cmd => respostaIA.toLowerCase().startsWith(cmd));
 
                 if (ehComandoHidratacao) {
                     console.log('\n💧 Processando comando de hidratação gerado pela IA:', respostaIA);
                     
-                    // Extrai o comando (primeira linha) e texto adicional, ignorando linhas vazias
-                    const linhas = respostaIA.split('\n').filter(l => l.trim());
-                    const primeiraLinha = linhas[0] || '';
-                    const textoAdicional = linhas.slice(1).join('\n').trim();
-                    
                     try {
-                        let respostaHidratacao;
-                        if (primeiraLinha.toLowerCase().startsWith('/agua') || primeiraLinha.toLowerCase().startsWith('/beber')) {
-                            // Extrai quantidade do comando /agua XXX
+                        const primeiraLinha = respostaIA.split('\n')[0].toLowerCase().trim();
+                        let respostaFinal = null;
+                        
+                        if (primeiraLinha.startsWith('/agua') || primeiraLinha.startsWith('/beber')) {
+                            // Registra consumo
                             const quantidade = parseInt(primeiraLinha.split(' ')[1]) || 250;
-                            const bottleTracker = getOrCreateBottleTracker(chatId);
-                            bottleTracker.registerWater(quantidade, 'ia');
+                            const resultado = registrarConsumo(chatId, quantidade, 'ia');
                             
-                            const status = bottleTracker.mainTracker.getStatus();
-                            respostaHidratacao = `💧 *Água registrada: ${quantidade}ml!*
-
-📊 *Hoje:* ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)
-⏳ *Faltam:* ${status.remaining}ml
-
-${status.status}`;
-                            // Inicia lembretes quando água é registrada
-                            iniciarLembretesHidratacao(client, chatId);
-                        } else if (primeiraLinha.toLowerCase().startsWith('/relatorio') || primeiraLinha.toLowerCase().startsWith('/report')) {
-                            const bottleTracker = getOrCreateBottleTracker(chatId);
-                            respostaHidratacao = bottleTracker.getBottleReport();
-                        } else if (primeiraLinha.toLowerCase().startsWith('/hidratação') || primeiraLinha.toLowerCase().startsWith('/hydration')) {
-                            // Comando de status/consulta
-                            const bottleTracker = getOrCreateBottleTracker(chatId);
-                            const status = bottleTracker.getBottleStatus();
-                            respostaHidratacao = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
-                        } else if (primeiraLinha.toLowerCase().startsWith('/lembrete') || primeiraLinha.toLowerCase().startsWith('/remind')) {
+                            if (!resultado.erro) {
+                                // Obtém dados para Gemini formatar
+                                const dados = obterDadosHidratacao(chatId);
+                                
+                                // Envia para Gemini formatar a resposta
+                                const partsGemini = [{
+                                    text: `Formatar resposta de registro de água para o usuário. Dados: ${JSON.stringify(resultado)}`
+                                }];
+                                respostaFinal = await processarComGemini(partsGemini);
+                                iniciarLembretesHidratacao(client, chatId);
+                            } else {
+                                respostaFinal = resultado.mensagem;
+                            }
+                        } 
+                        else if (primeiraLinha.startsWith('/hidratacao') || primeiraLinha.startsWith('/hydration')) {
+                            // Consulta status
+                            const dados = obterDadosHidratacao(chatId);
+                            
+                            if (!dados.erro) {
+                                // Envia dados para Gemini formatar
+                                const partsGemini = [{
+                                    text: `Formatar resposta de status de hidratação para o usuário. Dados: ${JSON.stringify(dados)}`
+                                }];
+                                respostaFinal = await processarComGemini(partsGemini);
+                            } else {
+                                respostaFinal = dados.mensagem;
+                            }
+                        } 
+                        else if (primeiraLinha.startsWith('/lembrete') || primeiraLinha.startsWith('/remind')) {
+                            // Lembretes não passam por Gemini - usam formato próprio
                             const bottleTracker = getOrCreateBottleTracker(chatId);
                             const tracker = bottleTracker.mainTracker;
                             const lembrete = tracker.gerarLembrete();
-                            respostaHidratacao = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
-                            // Garante que lembretes estão iniciados
+                            respostaFinal = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
                             iniciarLembretesHidratacao(client, chatId);
-                        } else {
-                            const bottleTracker = getOrCreateBottleTracker(chatId);
-                            const status = bottleTracker.getBottleStatus();
-                            respostaHidratacao = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
+                        } 
+                        else if (primeiraLinha.startsWith('/relatorio') || primeiraLinha.startsWith('/report')) {
+                            // Relatório formatado via Gemini
+                            const dados = obterDadosHidratacao(chatId);
+                            const partsGemini = [{
+                                text: `Gerar relatório detalhado de hidratação formatado para o usuário. Dados: ${JSON.stringify(dados)}`
+                            }];
+                            respostaFinal = await processarComGemini(partsGemini);
                         }
                         
-                        // Se houver texto adicional (encorajamento), mescla com a resposta
-                        let mensagemFinal = respostaHidratacao;
-                        if (textoAdicional && !primeiraLinha.toLowerCase().startsWith('/hidratação')) {
-                            // Adiciona encorajamento apenas se não for comando de consulta de status
-                            mensagemFinal = `${respostaHidratacao}\n\n${textoAdicional}`;
+                        if (respostaFinal) {
+                            await client.sendMessage(chatId, respostaFinal);
+                            adicionarAoHistorico(chatId, 'model', [{ text: respostaFinal }]);
                         }
-                        
-                        await client.sendMessage(chatId, mensagemFinal);
-                        adicionarAoHistorico(chatId, 'model', [{ text: mensagemFinal }]);
                     } catch (error) {
-                        console.error('❌ Erro ao processar hidratação:', error);
+                        console.error('❌ Erro ao processar hidratação:', error.message);
                         await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
                     }
                 } else if (ehComandoCalendario) { 
