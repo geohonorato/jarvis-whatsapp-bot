@@ -285,7 +285,56 @@ function obterDataHoraAtual() {
     return { dataFormatada, horaFormatada };
 }
 
+/**
+ * Formata resposta de hidratação usando Groq
+ * @param {Array} parts - Array com instruções de formatação
+ * @returns {Promise<string>} Resposta formatada
+ */
+async function processarComGroq(parts, tentativa = 1) {
+    const MAX_RETRIES = 3;
+    const DELAY_BASE = 2000;
+
+    try {
+        console.log(`\n💧 Processando formatação de hidratação com Groq... (tentativa ${tentativa}/${MAX_RETRIES})`);
+        
+        const promptAtual = parts.map(part => part.text || '').join('\n');
+
+        try {
+            const response = await groqClient.post('/chat/completions', {
+                ...defaultOptions,
+                messages: [
+                    { 
+                        role: 'system', 
+                        content: `Você é especialista em formatação de mensagens de hidratação. Responda SEMPRE em português do Brasil com emojis. Seja encorajador, positivo e motivador. Nunca inclua explicações técnicas.` 
+                    },
+                    { role: 'user', content: promptAtual }
+                ]
+            });
+
+            const resposta = response.data.choices[0]?.message?.content;
+            if (!resposta) {
+                throw new Error('Resposta vazia do modelo');
+            }
+
+            return filtrarPensamentos(resposta);
+
+        } catch (error) {
+            if ((error.status === 429 || error.status === 503) && tentativa < MAX_RETRIES) {
+                console.log(`\n⚠️ API sobrecarregada, tentando novamente em ${DELAY_BASE * tentativa}ms...`);
+                await new Promise(resolve => setTimeout(resolve, DELAY_BASE * tentativa));
+                return processarComGroq(parts, tentativa + 1);
+            }
+            throw error;
+        }
+
+    } catch (error) {
+        console.error('\n❌ Erro ao processar hidratação com Groq:', error.message);
+        return '❌ Erro ao processar sua solicitação de hidratação.';
+    }
+}
+
 module.exports = {
     processarMensagemMultimodal,
-    filtrarPensamentos
+    filtrarPensamentos,
+    processarComGroq
 };

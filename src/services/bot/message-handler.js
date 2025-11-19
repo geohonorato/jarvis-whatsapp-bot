@@ -1,7 +1,8 @@
 const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat-history');
 const {
-    processarMensagemMultimodal: processarComGroq,
-    filtrarPensamentos
+    processarMensagemMultimodal: processarComGroqPrincipal,
+    filtrarPensamentos,
+    processarComGroq
 } = require('../api/groq');
 const {
     processarMensagemMultimodal: processarComGemini,
@@ -424,7 +425,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
 
         // SEMPRE usa Groq para decisão final (mais rápido e melhor para raciocínio)
         console.log('🧠 Groq (GPT OSS 120b) processando e decidindo ação...');
-        const respostaIA = await processarComGroq(partsParaProcessar, historicoParaEnviar);
+        const respostaIA = await processarComGroqPrincipal(partsParaProcessar, historicoParaEnviar);
         
         if (respostaIA && !respostaIA.startsWith('❌')) {
             const partsResposta = [{ text: respostaIA }]; // Prepara resposta para histórico
@@ -577,14 +578,11 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             const resultado = registrarConsumo(chatId, quantidade, 'ia');
                             
                             if (!resultado.erro) {
-                                // Obtém dados para Gemini formatar
-                                const dados = obterDadosHidratacao(chatId);
-                                
-                                // Envia para Gemini formatar a resposta
-                                const partsGemini = [{
-                                    text: `Formatar resposta de registro de água para o usuário. Dados: ${JSON.stringify(resultado)}`
+                                // Envia para Groq formatar a resposta
+                                const partsGroq = [{
+                                    text: `Formatar uma resposta amigável para o usuário ter registrado ${quantidade}ml de água. Consumo atual: ${resultado.consumidoHoje}ml de ${resultado.metaDiaria}ml (${resultado.percentual}%). Faltam: ${resultado.faltam}ml. Responda de forma encorajadora e positiva, em português do Brasil. Máximo 3 linhas.`
                                 }];
-                                respostaFinal = await processarComGemini(partsGemini);
+                                respostaFinal = await processarComGroq(partsGroq);
                                 iniciarLembretesHidratacao(client, chatId);
                             } else {
                                 respostaFinal = resultado.mensagem;
@@ -595,17 +593,17 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             const dados = obterDadosHidratacao(chatId);
                             
                             if (!dados.erro) {
-                                // Envia dados para Gemini formatar
-                                const partsGemini = [{
-                                    text: `Formatar resposta de status de hidratação para o usuário. Dados: ${JSON.stringify(dados)}`
+                                // Envia dados para Groq formatar
+                                const partsGroq = [{
+                                    text: `Formatar status de hidratação de forma clara e amigável. Consumo: ${dados.consumidoHoje}ml de ${dados.metaDiaria}ml (${dados.percentual}%). Faltam: ${dados.faltam}ml. Garrafa: ${dados.garrafa.nome} (${dados.garrafa.tamanho}ml). Status: ${dados.statusCritico}. Responda em português do Brasil com emojis. Máximo 4 linhas.`
                                 }];
-                                respostaFinal = await processarComGemini(partsGemini);
+                                respostaFinal = await processarComGroq(partsGroq);
                             } else {
                                 respostaFinal = dados.mensagem;
                             }
                         } 
                         else if (primeiraLinha.startsWith('/lembrete') || primeiraLinha.startsWith('/remind')) {
-                            // Lembretes não passam por Gemini - usam formato próprio
+                            // Lembretes não passam por Groq novamente - usam formato próprio
                             const bottleTracker = getOrCreateBottleTracker(chatId);
                             const tracker = bottleTracker.mainTracker;
                             const lembrete = tracker.gerarLembrete();
@@ -613,12 +611,12 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             iniciarLembretesHidratacao(client, chatId);
                         } 
                         else if (primeiraLinha.startsWith('/relatorio') || primeiraLinha.startsWith('/report')) {
-                            // Relatório formatado via Gemini
+                            // Relatório formatado via Groq
                             const dados = obterDadosHidratacao(chatId);
-                            const partsGemini = [{
-                                text: `Gerar relatório detalhado de hidratação formatado para o usuário. Dados: ${JSON.stringify(dados)}`
+                            const partsGroq = [{
+                                text: `Gerar relatório de hidratação detalhado e bem formatado. Consumo: ${dados.consumidoHoje}ml de ${dados.metaDiaria}ml (${dados.percentual}%). Faltam: ${dados.faltam}ml. Garrafa: ${dados.garrafa.nome} (${dados.garrafa.tamanho}ml). Próximo lembrete em ${dados.proximoLembrete.minutos} minutos. Responda em português do Brasil com formatação clara e emojis. Máximo 8 linhas.`
                             }];
-                            respostaFinal = await processarComGemini(partsGemini);
+                            respostaFinal = await processarComGroq(partsGroq);
                         }
                         
                         if (respostaFinal) {
