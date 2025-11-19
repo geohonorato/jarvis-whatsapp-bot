@@ -20,7 +20,7 @@ class HydrationTracker {
 
         // Configuração padrão
         this.config = {
-            dailyGoal: 3000, // ml por dia
+            dailyGoal: 2000, // ml por dia
             minIntake: 200, // ml mínimo por lembretes
             maxIntake: 500, // ml máximo por lembrete
             reminderInterval: 60, // minutos entre lembretes base
