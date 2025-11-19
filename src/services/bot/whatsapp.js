@@ -5,6 +5,13 @@ const path = require('path');
 const fs = require('fs');
 const { iniciarVerificacaoLembretes } = require('../reminders');
 const { handleMessage } = require('./message-handler');
+const { 
+    salvarBackupCredenciais, 
+    carregarBackupCredenciais, 
+    monitorarMudancasAuth,
+    limparBackupsAntigos,
+    CREDENTIALS_BACKUP_PATH
+} = require('./whatsapp-auth-manager');
 
 let qrGerado = false;
 let tentativasReconexao = 0;
@@ -95,6 +102,17 @@ client.on('authenticated', () => {
     console.log('\n✅ WhatsApp autenticado!');
     qrGerado = false;
     tentativasReconexao = 0; // Reset contador de tentativas
+    
+    // Salva backup das credenciais logo após autenticação bem-sucedida
+    const authPath = path.join(process.cwd(), '.wwebjs_auth');
+    salvarBackupCredenciais({
+        timestamp: Date.now(),
+        authenticated: true,
+        lastSync: new Date().toISOString()
+    });
+    
+    // Inicia monitoramento para backup futuro
+    monitorarMudancasAuth(authPath);
 });
 
 client.on('ready', () => {

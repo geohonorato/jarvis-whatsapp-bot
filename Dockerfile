@@ -30,10 +30,17 @@ RUN npm install --omit=dev --no-audit --no-fund
 COPY . .
 
 # Cria diretórios necessários
-RUN mkdir -p temp temp_images .wwebjs_auth
+RUN mkdir -p temp temp_images .wwebjs_auth persistent
+
+# Define variáveis de ambiente para persistência
+ENV WHATSAPP_CREDENTIALS_PATH=/app/persistent/.whatsapp_session \
+    WHATSAPP_ENCRYPTION_KEY=${WHATSAPP_ENCRYPTION_KEY}
 
 # Expõe porta (opcional, útil para health checks)
 EXPOSE 3000
+
+# VOLUME para persistência de sessão WhatsApp e dados
+VOLUME ["/app/persistent"]
 
 # Comando para iniciar o bot
 CMD ["npm", "start"]
