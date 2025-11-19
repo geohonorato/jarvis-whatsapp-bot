@@ -31,15 +31,13 @@ const hydrationHandlers = {
             const amount = parseInt(parts[1]) || 250;
             const status = tracker.logWater(amount, 'whatsapp');
 
-            return `
-💧 *Água registrada!*
+            return `💧 *Água registrada!*
 
 📊 *Hoje:* ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)
 ⏳ *Faltam:* ${status.remaining}ml
 🔄 *Consumições:* ${status.intakeCount}
 
-${status.status}
-            `.trim();
+${status.status}`.trim();
         }
 
         if (parts[0] === '/hidratação' || parts[0] === '/hydration') {
@@ -52,12 +50,10 @@ ${status.status}
 
         if (parts[0] === '/lembrete' || parts[0] === '/remind') {
             const lembrete = tracker.gerarLembrete();
-            return `
-${lembrete.message}
+            return `${lembrete.message}
 
 ⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min
-🎯 *Razão:* ${lembrete.razao}
-            `.trim();
+🎯 *Razão:* ${lembrete.razao}`.trim();
         }
     },
 
@@ -74,8 +70,7 @@ ${lembrete.message}
             barraProgresso += i < chunks ? '🟦' : '🟩';
         }
 
-        return `
-💧 *HIDRATAÇÃO - STATUS DO DIA*
+        return `💧 *HIDRATAÇÃO - STATUS DO DIA*
 
 ${barraProgresso}
 ${status.percentage}% da meta
@@ -86,8 +81,7 @@ ${status.percentage}% da meta
 
 ${status.status}
 
-💡 *Dica:* Use /agua 250 para registrar água
-        `.trim();
+💡 *Dica:* Use /agua 250 para registrar água`.trim();
     },
 
     /**
@@ -108,8 +102,7 @@ ${status.status}
             recomendacoes = relatorio.recomendacoes.map(r => `• ${r}`).join('\n');
         }
 
-        return `
-📈 *RELATÓRIO INTELIGENTE DE HIDRATAÇÃO*
+        return `📈 *RELATÓRIO INTELIGENTE DE HIDRATAÇÃO*
 
 *Status Hoje:*
 ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)
@@ -120,8 +113,7 @@ ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)
 *Recomendações:*
 ${recomendacoes}
 
-💡 *Ative lembretes inteligentes:* /lembrete
-        `.trim();
+💡 *Ative lembretes inteligentes:* /lembrete`.trim();
     },
 
     /**
