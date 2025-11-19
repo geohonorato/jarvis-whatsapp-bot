@@ -62,12 +62,23 @@ class BottleTracker {
     saveBottleConfig() {
         try {
             const fs = require('fs');
-            const data = require('fs').readFileSync(this.mainTracker.dataFile, 'utf8');
-            const jsonData = JSON.parse(data);
+            const path = require('path');
+            
+            // Garante que o diretório existe
+            if (!fs.existsSync(this.mainTracker.dataDir)) {
+                fs.mkdirSync(this.mainTracker.dataDir, { recursive: true });
+            }
+            
+            // Lê dados existentes ou cria objeto vazio
+            let jsonData = {};
+            if (fs.existsSync(this.mainTracker.dataFile)) {
+                const data = fs.readFileSync(this.mainTracker.dataFile, 'utf8');
+                jsonData = JSON.parse(data);
+            }
             
             jsonData.bottle = this.bottle;
             
-            require('fs').writeFileSync(
+            fs.writeFileSync(
                 this.mainTracker.dataFile,
                 JSON.stringify(jsonData, null, 2)
             );

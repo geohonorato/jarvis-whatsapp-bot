@@ -79,7 +79,8 @@ async function handleMessage(msg, client) {
                     resposta = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
                     iniciarLembretesHidratacao(client, chatId);
                 } else {
-                    resposta = bottleTracker.getBottleStatus();
+                    const status = bottleTracker.getBottleStatus();
+                    resposta = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
                 }
                 
                 adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
@@ -593,7 +594,8 @@ ${status.status}`;
                         } else if (primeiraLinha.toLowerCase().startsWith('/hidratação') || primeiraLinha.toLowerCase().startsWith('/hydration')) {
                             // Comando de status/consulta
                             const bottleTracker = getOrCreateBottleTracker(chatId);
-                            respostaHidratacao = bottleTracker.getBottleStatus();
+                            const status = bottleTracker.getBottleStatus();
+                            respostaHidratacao = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
                         } else if (primeiraLinha.toLowerCase().startsWith('/lembrete') || primeiraLinha.toLowerCase().startsWith('/remind')) {
                             const bottleTracker = getOrCreateBottleTracker(chatId);
                             const tracker = bottleTracker.mainTracker;
@@ -603,7 +605,8 @@ ${status.status}`;
                             iniciarLembretesHidratacao(client, chatId);
                         } else {
                             const bottleTracker = getOrCreateBottleTracker(chatId);
-                            respostaHidratacao = bottleTracker.getBottleStatus();
+                            const status = bottleTracker.getBottleStatus();
+                            respostaHidratacao = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
                         }
                         
                         // Se houver texto adicional (encorajamento), mescla com a resposta
