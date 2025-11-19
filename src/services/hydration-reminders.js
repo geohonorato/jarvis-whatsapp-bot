@@ -14,8 +14,8 @@ const activeReminders = {};
  * @param {string} userId - ID do usuário (chatId)
  */
 function iniciarLembretesHidratacao(client, userId) {
-    // Se já há lembrete ativo, não duplica
-    if (activeReminders[userId]) {
+    // Se há lembrete com status ativo, não duplica
+    if (activeReminders[userId]?.active) {
         console.log(`⏰ Lembretes já ativos para ${userId}`);
         return;
     }
@@ -25,11 +25,16 @@ function iniciarLembretesHidratacao(client, userId) {
     const tracker = getOrCreateTracker(userId);
     const status = tracker.getStatus();
 
-    // Se já atingiu meta hoje, não envia lembretes
+    // Se já atingiu meta hoje, marca como pausado mas não tenta agendar
     if (status.goalMet) {
         console.log(`✅ Meta de hidratação já atingida para ${userId}`);
         activeReminders[userId] = { active: false, reason: 'goal_met' };
         return;
+    }
+
+    // Limpa qualquer lembrete anterior (pausado ou falho)
+    if (activeReminders[userId]?.timeoutId) {
+        clearTimeout(activeReminders[userId].timeoutId);
     }
 
     // Agenda o próximo lembrete
@@ -50,7 +55,7 @@ function agendarProximoLembrete(client, userId) {
             : proximoLembrete;
 
         if (minutosAteProximoLembrete <= 0) {
-            console.log(`⏰ Lembretes desativados para ${userId} (meta atingida)`);
+            console.log(`⏰ Lembretes desativados para ${userId} (meta atingida ou intervalo inválido)`);
             activeReminders[userId] = { active: false, reason: 'goal_met' };
             return;
         }
@@ -58,7 +63,8 @@ function agendarProximoLembrete(client, userId) {
         const msAteProximo = minutosAteProximoLembrete * 60 * 1000;
         const horasMinutos = `${Math.floor(minutosAteProximoLembrete / 60)}h ${minutosAteProximoLembrete % 60}min`;
 
-        console.log(`⏰ Próximo lembrete para ${userId} em ${horasMinutos}`);
+        console.log(`⏰ Próximo lembrete para ${userId} em ${horasMinutos} (${minutosAteProximoLembrete} min)`);
+        console.log(`   Motivo: ${typeof proximoLembrete === 'object' ? proximoLembrete.reason : 'cálculo automático'}`);
 
         // Limpa timeout anterior se existir
         if (activeReminders[userId]?.timeoutId) {
@@ -67,6 +73,7 @@ function agendarProximoLembrete(client, userId) {
 
         // Agenda novo timeout
         const timeoutId = setTimeout(async () => {
+            console.log(`📨 Disparando lembrete para ${userId}...`);
             await enviarLembrete(client, userId);
             // Agenda próximo após enviar este
             agendarProximoLembrete(client, userId);
@@ -77,11 +84,15 @@ function agendarProximoLembrete(client, userId) {
             active: true,
             timeoutId,
             proximoEmMs: msAteProximo,
-            proximoEm: new Date(Date.now() + msAteProximo).toLocaleString('pt-BR')
+            proximoEm: new Date(Date.now() + msAteProximo).toLocaleString('pt-BR'),
+            agendadoEm: new Date().toLocaleString('pt-BR')
         };
+
+        console.log(`✅ Lembrete agendado com sucesso para ${userId}`);
 
     } catch (error) {
         console.error(`❌ Erro ao agendar lembrete para ${userId}:`, error.message);
+        activeReminders[userId] = { active: false, reason: 'error', errorMsg: error.message };
     }
 }
 

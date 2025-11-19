@@ -556,28 +556,38 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 if (ehComandoHidratacao) {
                     console.log('\n💧 Processando comando de hidratação gerado pela IA:', respostaIA);
                     
-                    // Extrai o comando e a resposta adicional
-                    const primeiraLinha = respostaIA.split('\n')[0];
-                    const respostaSuplementar = respostaIA.split('\n').slice(1).join('\n').trim();
+                    // Extrai o comando (primeira linha) e texto adicional, ignorando linhas vazias
+                    const linhas = respostaIA.split('\n').filter(l => l.trim());
+                    const primeiraLinha = linhas[0] || '';
+                    const textoAdicional = linhas.slice(1).join('\n').trim();
                     
                     try {
                         let respostaHidratacao;
                         if (primeiraLinha.toLowerCase().startsWith('/agua') || primeiraLinha.toLowerCase().startsWith('/beber')) {
                             respostaHidratacao = await hydrationHandlers.handleWaterCommand(primeiraLinha, chatId);
+                            // Inicia lembretes quando água é registrada
+                            iniciarLembretesHidratacao(client, chatId);
                         } else if (primeiraLinha.toLowerCase().startsWith('/relatorio') || primeiraLinha.toLowerCase().startsWith('/report')) {
                             respostaHidratacao = hydrationHandlers.getDetailedReport(chatId);
+                        } else if (primeiraLinha.toLowerCase().startsWith('/hidratação') || primeiraLinha.toLowerCase().startsWith('/hydration')) {
+                            // Comando de status/consulta - não repete a resposta da IA
+                            respostaHidratacao = hydrationHandlers.getStatusReport(chatId);
                         } else if (primeiraLinha.toLowerCase().startsWith('/lembrete') || primeiraLinha.toLowerCase().startsWith('/remind')) {
                             const tracker = getOrCreateTracker(chatId);
                             const lembrete = tracker.gerarLembrete();
                             respostaHidratacao = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
+                            // Garante que lembretes estão iniciados
+                            iniciarLembretesHidratacao(client, chatId);
                         } else {
                             respostaHidratacao = hydrationHandlers.getStatusReport(chatId);
                         }
                         
-                        // Se houver texto adicional (encorajamento, etc), adiciona
-                        const mensagemFinal = respostaSuplementar 
-                            ? `${respostaHidratacao}\n\n${respostaSuplementar}`
-                            : respostaHidratacao;
+                        // Se houver texto adicional (encorajamento), mescla com a resposta
+                        let mensagemFinal = respostaHidratacao;
+                        if (textoAdicional && !primeiraLinha.toLowerCase().startsWith('/hidratação')) {
+                            // Adiciona encorajamento apenas se não for comando de consulta de status
+                            mensagemFinal = `${respostaHidratacao}\n\n${textoAdicional}`;
+                        }
                         
                         await client.sendMessage(chatId, mensagemFinal);
                         adicionarAoHistorico(chatId, 'model', [{ text: mensagemFinal }]);
