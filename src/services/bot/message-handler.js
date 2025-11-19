@@ -24,10 +24,6 @@ const {
 
 // Cache temporário para última imagem gerada (por chat)
 const ultimaImagemCache = {};
-
-// Rastrear usuários que já iniciaram lembretes
-const usuariosComLembretes = new Set();
-
 const { 
     getGoogleAuth,
     listarEventos,
@@ -55,12 +51,8 @@ async function handleMessage(msg, client) {
         const lowerCaseBody = msg.body?.toLowerCase() || '';
         const hasText = !!msg.body; // Verifica se há texto na mensagem
 
-        // --- INICIA LEMBRETES AUTOMATICAMENTE NA PRIMEIRA MENSAGEM ---
-        if (!usuariosComLembretes.has(chatId)) {
-            console.log(`🆕 Primeiro contato com ${chatId} - iniciando lembretes automaticamente`);
-            usuariosComLembretes.add(chatId);
-            iniciarLembretesHidratacao(client, chatId);
-        }
+        // --- INICIA LEMBRETES AUTOMATICAMENTE ---
+        iniciarLembretesHidratacao(client, chatId);
 
         // --- Verificação de Comandos de Hidratação ---
         if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber') ||
