@@ -52,6 +52,8 @@ Veja `docs/CREDENTIALS.md` para instruções completas.
 
 | Documento | Descrição |
 |-----------|-----------|
+| `docs/DIGITALOCEAN_SETUP.md` | **Passo a passo DigitalOcean** (LEIA PRIMEIRO!) |
+| `docs/WHATSAPP_PERSISTENCE.md` | Como manter sessão entre deploys |
 | `docs/BOTTLE_QUICK_START.md` | Como registrar água em ml |
 | `docs/BOTTLE_TRACKING.md` | Sistema completo de hidratação |
 | `docs/HYDRATION_REMINDERS.md` | Lembretes adaptativos |
