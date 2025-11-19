@@ -603,11 +603,18 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             }
                         } 
                         else if (primeiraLinha.startsWith('/lembrete') || primeiraLinha.startsWith('/remind')) {
-                            // Lembretes não passam por Groq novamente - usam formato próprio
-                            const bottleTracker = getOrCreateBottleTracker(chatId);
-                            const tracker = bottleTracker.mainTracker;
-                            const lembrete = tracker.gerarLembrete();
-                            respostaFinal = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
+                            // Lembretes - usa dados frescos via hidratacao-api
+                            const dados = obterDadosHidratacao(chatId);
+                            
+                            const mensagensLembrete = [
+                                `💧 Hidratação: ${dados.percentual}% da meta (${dados.consumidoHoje}ml/${dados.metaDiaria}ml). Faltam ${dados.faltam}ml!`,
+                                `🚰 Beba água! Você consumiu ${dados.consumidoHoje}ml. Objetivo: ${dados.metaDiaria}ml. Faltam ${dados.faltam}ml.`,
+                                `⏰ Hora de beber! Status: ${dados.percentual}%. Ingestão de hoje: ${dados.consumidoHoje}ml/${dados.metaDiaria}ml`,
+                                `💪 Mantenha a hidratação! Faltam ${dados.faltam}ml para atingir a meta de ${dados.metaDiaria}ml!`,
+                            ];
+                            
+                            const mensagemLembrete = mensagensLembrete[Math.floor(Math.random() * mensagensLembrete.length)];
+                            respostaFinal = `${mensagemLembrete}\n\n⏰ *Próximo lembrete em:* ${dados.proximoLembrete.minutos || dados.proximoLembrete}min`;
                             iniciarLembretesHidratacao(client, chatId);
                         } 
                         else if (primeiraLinha.startsWith('/relatorio') || primeiraLinha.startsWith('/report')) {
