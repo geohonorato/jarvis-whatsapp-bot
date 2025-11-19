@@ -11,6 +11,7 @@ const { responderMagisteriumComFormatacao } = require('../magisterium');
 const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
 const { hydrationHandlers, getOrCreateTracker } = require('../hydration-example');
+const { getOrCreateBottleTracker } = require('../hydration-bottle');
 const {
     iniciarLembretesHidratacao,
     pausarLembretesHidratacao,
@@ -62,18 +63,23 @@ async function handleMessage(msg, client) {
             
             try {
                 let resposta;
+                const bottleTracker = getOrCreateBottleTracker(chatId);
+                
                 if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber')) {
-                    resposta = await hydrationHandlers.handleWaterCommand(msg.body, chatId);
-                    // Inicia lembretes quando user começa a interagir com hidratação
+                    const quantidade = parseInt(msg.body.split(' ')[1]) || 250;
+                    bottleTracker.registerWater(quantidade, 'user');
+                    const status = bottleTracker.mainTracker.getStatus();
+                    resposta = `💧 *Água registrada: ${quantidade}ml!*\n\n📊 *Hoje:* ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)\n⏳ *Faltam:* ${status.remaining}ml\n\n${status.status}`;
                     iniciarLembretesHidratacao(client, chatId);
                 } else if (lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report')) {
-                    resposta = hydrationHandlers.getDetailedReport(chatId);
+                    resposta = bottleTracker.getBottleReport();
                 } else if (lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
-                    const tracker = getOrCreateTracker(chatId);
+                    const tracker = bottleTracker.mainTracker;
                     const lembrete = tracker.gerarLembrete();
                     resposta = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
+                    iniciarLembretesHidratacao(client, chatId);
                 } else {
-                    resposta = hydrationHandlers.getStatusReport(chatId);
+                    resposta = bottleTracker.getBottleStatus();
                 }
                 
                 adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
@@ -567,22 +573,37 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                     try {
                         let respostaHidratacao;
                         if (primeiraLinha.toLowerCase().startsWith('/agua') || primeiraLinha.toLowerCase().startsWith('/beber')) {
-                            respostaHidratacao = await hydrationHandlers.handleWaterCommand(primeiraLinha, chatId);
+                            // Extrai quantidade do comando /agua XXX
+                            const quantidade = parseInt(primeiraLinha.split(' ')[1]) || 250;
+                            const bottleTracker = getOrCreateBottleTracker(chatId);
+                            bottleTracker.registerWater(quantidade, 'ia');
+                            
+                            const status = bottleTracker.mainTracker.getStatus();
+                            respostaHidratacao = `💧 *Água registrada: ${quantidade}ml!*
+
+📊 *Hoje:* ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)
+⏳ *Faltam:* ${status.remaining}ml
+
+${status.status}`;
                             // Inicia lembretes quando água é registrada
                             iniciarLembretesHidratacao(client, chatId);
                         } else if (primeiraLinha.toLowerCase().startsWith('/relatorio') || primeiraLinha.toLowerCase().startsWith('/report')) {
-                            respostaHidratacao = hydrationHandlers.getDetailedReport(chatId);
+                            const bottleTracker = getOrCreateBottleTracker(chatId);
+                            respostaHidratacao = bottleTracker.getBottleReport();
                         } else if (primeiraLinha.toLowerCase().startsWith('/hidratação') || primeiraLinha.toLowerCase().startsWith('/hydration')) {
-                            // Comando de status/consulta - não repete a resposta da IA
-                            respostaHidratacao = hydrationHandlers.getStatusReport(chatId);
+                            // Comando de status/consulta
+                            const bottleTracker = getOrCreateBottleTracker(chatId);
+                            respostaHidratacao = bottleTracker.getBottleStatus();
                         } else if (primeiraLinha.toLowerCase().startsWith('/lembrete') || primeiraLinha.toLowerCase().startsWith('/remind')) {
-                            const tracker = getOrCreateTracker(chatId);
+                            const bottleTracker = getOrCreateBottleTracker(chatId);
+                            const tracker = bottleTracker.mainTracker;
                             const lembrete = tracker.gerarLembrete();
                             respostaHidratacao = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
                             // Garante que lembretes estão iniciados
                             iniciarLembretesHidratacao(client, chatId);
                         } else {
-                            respostaHidratacao = hydrationHandlers.getStatusReport(chatId);
+                            const bottleTracker = getOrCreateBottleTracker(chatId);
+                            respostaHidratacao = bottleTracker.getBottleStatus();
                         }
                         
                         // Se houver texto adicional (encorajamento), mescla com a resposta
