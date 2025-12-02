@@ -5,31 +5,10 @@ const path = require('path');
 const fs = require('fs');
 const { iniciarVerificacaoLembretes } = require('../reminders');
 const { handleMessage } = require('./message-handler');
-const { 
-    salvarBackupCredenciais, 
-    carregarBackupCredenciais, 
-    monitorarMudancasAuth,
-    validarConfiguracao
-} = require('./whatsapp-auth-spaces');
 
 let qrGerado = false;
 let tentativasReconexao = 0;
 const maxTentativasReconexao = 3;
-
-// Valida configuração de DigitalOcean Spaces (se disponível)
-(async () => {
-    const spacesConfigurido = process.env.DO_SPACES_KEY && process.env.DO_SPACES_SECRET;
-    if (spacesConfigurido) {
-        console.log('🔄 Validando DigitalOcean Spaces...');
-        const valido = await validarConfiguracao();
-        if (!valido) {
-            console.error('⚠️ Spaces não será usado para persistência');
-        }
-    } else {
-        console.warn('⚠️ DigitalOcean Spaces não configurado - sessão será perdida em restart');
-        console.warn('   Configure DO_SPACES_KEY e DO_SPACES_SECRET para persistência');
-    }
-})();
 
 // Função para limpar cache de autenticação
 function limparCacheAuth() {
@@ -115,18 +94,7 @@ client.on('qr', qr => {
 client.on('authenticated', () => {
     console.log('\n✅ WhatsApp autenticado!');
     qrGerado = false;
-    tentativasReconexao = 0; // Reset contador de tentativas
-    
-    // Salva backup das credenciais logo após autenticação bem-sucedida
-    const authPath = path.join(process.cwd(), '.wwebjs_auth');
-    
-    // Se Spaces está configurado, faz backup
-    (async () => {
-        await salvarBackupCredenciais(authPath);
-    })();
-    
-    // Inicia monitoramento para backup futuro (a cada minuto)
-    monitorarMudancasAuth(authPath, 60000);
+    tentativasReconexao = 0;
 });
 
 client.on('ready', () => {
