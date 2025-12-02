@@ -40,9 +40,43 @@ class FinanceTracker {
         // Dados financeiros
         this.data = {
             currentMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
-            transactions: [], // { date, type: 'expense|income', amount, category, description, source }
+            transactions: [], // { date, type: 'expense|income', amount, category, description, source, necessity, necessityScore }
             budgets: {}, // { category: amount }
             recurringTransactions: [] // { type, amount, category, description, dayOfMonth }
+        };
+
+        // Mapa de necessidade por categoria e keywords
+        this.necessityMap = {
+            // Essencial (80-100)
+            essential: {
+                keywords: ['aluguel', 'água', 'luz', 'gás', 'internet', 'condomínio', 'iptu', 'remédio', 'médico', 'hospital', 'farmácia', 'saúde', 'supermercado', 'mercado', 'feira', 'pão', 'leite', 'arroz', 'feijão'],
+                categories: ['Moradia', 'Saúde'],
+                baseScore: 90
+            },
+            // Importante (60-79)
+            important: {
+                keywords: ['trabalho', 'transporte', 'combustível', 'gasolina', 'ônibus', 'metrô', 'educação', 'curso', 'livro', 'faculdade', 'escola', 'roupa trabalho', 'uniforme'],
+                categories: ['Transporte', 'Educação'],
+                baseScore: 70
+            },
+            // Moderado (40-59)
+            moderate: {
+                keywords: ['almoço', 'jantar', 'café', 'lanche', 'comida', 'alimentação', 'roupa', 'calça', 'camisa', 'sapato', 'corte cabelo', 'barbeiro'],
+                categories: ['Alimentação', 'Vestuário'],
+                baseScore: 50
+            },
+            // Dispensável (20-39)
+            dispensable: {
+                keywords: ['fast food', 'delivery', 'ifood', 'uber eats', 'lanche noite', 'salgado', 'doce', 'chocolate', 'refrigerante', 'cerveja'],
+                categories: [],
+                baseScore: 30
+            },
+            // Supérfluo (0-19)
+            superfluous: {
+                keywords: ['cinema', 'streaming', 'netflix', 'spotify', 'game', 'jogo', 'balada', 'bar', 'festa', 'show', 'viagem lazer', 'shopping', 'compra impulso'],
+                categories: ['Lazer'],
+                baseScore: 10
+            }
         };
 
         this.loadData();
@@ -110,12 +144,108 @@ class FinanceTracker {
     }
 
     /**
+     * Analisa necessidade de um gasto
+     * Retorna score de 0-100 (0 = supérfluo, 100 = essencial)
+     */
+    analyzeNecessity(category, description) {
+        const descLower = description.toLowerCase();
+        let maxScore = 0;
+        let necessityLevel = 'moderate';
+
+        // Analisa keywords na descrição
+        for (const [level, data] of Object.entries(this.necessityMap)) {
+            const hasKeyword = data.keywords.some(keyword => descLower.includes(keyword));
+            const isCategory = data.categories.includes(category);
+            
+            if (hasKeyword || isCategory) {
+                if (data.baseScore > maxScore) {
+                    maxScore = data.baseScore;
+                    necessityLevel = level;
+                }
+            }
+        }
+
+        // Se não encontrou match específico, usa categoria padrão
+        if (maxScore === 0) {
+            if (category === 'Moradia' || category === 'Saúde') {
+                maxScore = 90;
+                necessityLevel = 'essential';
+            } else if (category === 'Transporte' || category === 'Educação') {
+                maxScore = 70;
+                necessityLevel = 'important';
+            } else if (category === 'Alimentação' || category === 'Vestuário') {
+                maxScore = 50;
+                necessityLevel = 'moderate';
+            } else if (category === 'Lazer') {
+                maxScore = 10;
+                necessityLevel = 'superfluous';
+            } else {
+                maxScore = 40;
+                necessityLevel = 'moderate';
+            }
+        }
+
+        // Ajusta score baseado em contexto adicional
+        if (descLower.includes('essencial') || descLower.includes('urgente') || descLower.includes('necessário')) {
+            maxScore = Math.min(100, maxScore + 10);
+        }
+        if (descLower.includes('impulso') || descLower.includes('queria') || descLower.includes('vontade')) {
+            maxScore = Math.max(0, maxScore - 15);
+            necessityLevel = maxScore < 20 ? 'superfluous' : necessityLevel;
+        }
+
+        return {
+            score: maxScore,
+            level: necessityLevel,
+            label: this.getNecessityLabel(maxScore),
+            emoji: this.getNecessityEmoji(maxScore),
+            color: this.getNecessityColor(maxScore)
+        };
+    }
+
+    /**
+     * Retorna label descritiva baseada no score
+     */
+    getNecessityLabel(score) {
+        if (score >= 80) return 'Essencial';
+        if (score >= 60) return 'Importante';
+        if (score >= 40) return 'Moderado';
+        if (score >= 20) return 'Dispensável';
+        return 'Supérfluo';
+    }
+
+    /**
+     * Retorna emoji baseado no score
+     */
+    getNecessityEmoji(score) {
+        if (score >= 80) return '🔴'; // Essencial
+        if (score >= 60) return '🟠'; // Importante
+        if (score >= 40) return '🟡'; // Moderado
+        if (score >= 20) return '🟢'; // Dispensável
+        return '🔵'; // Supérfluo
+    }
+
+    /**
+     * Retorna cor baseada no score
+     */
+    getNecessityColor(score) {
+        if (score >= 80) return 'red';
+        if (score >= 60) return 'orange';
+        if (score >= 40) return 'yellow';
+        if (score >= 20) return 'green';
+        return 'blue';
+    }
+
+    /**
      * Registra uma despesa
      */
     addExpense(amount, category, description = '', source = 'manual') {
         if (amount <= 0) {
             return { error: 'Valor deve ser maior que zero' };
         }
+
+        // Analisa necessidade do gasto
+        const necessity = this.analyzeNecessity(category, description);
 
         const transaction = {
             id: Date.now().toString(),
@@ -124,14 +254,18 @@ class FinanceTracker {
             amount: parseFloat(amount.toFixed(2)),
             category: category || 'Outros',
             description,
-            source
+            source,
+            necessity: necessity.level,
+            necessityScore: necessity.score,
+            necessityLabel: necessity.label,
+            necessityEmoji: necessity.emoji
         };
 
         this.data.transactions.push(transaction);
         this.saveData();
 
-        console.log(`💸 Despesa registrada: R$${amount} - ${category}`);
-        return { success: true, transaction };
+        console.log(`💸 Despesa registrada: R$${amount} - ${category} [${necessity.emoji} ${necessity.label}]`);
+        return { success: true, transaction, necessity };
     }
 
     /**
@@ -201,6 +335,50 @@ class FinanceTracker {
             .sort((a, b) => b[1] - a[1])
             .slice(0, 5);
 
+        // Análise de necessidade dos gastos
+        const expenseTransactions = this.data.transactions.filter(t => t.type === 'expense');
+        const necessityAnalysis = {
+            essential: { amount: 0, count: 0, percentage: 0 },      // 80-100
+            important: { amount: 0, count: 0, percentage: 0 },      // 60-79
+            moderate: { amount: 0, count: 0, percentage: 0 },       // 40-59
+            dispensable: { amount: 0, count: 0, percentage: 0 },    // 20-39
+            superfluous: { amount: 0, count: 0, percentage: 0 }     // 0-19
+        };
+
+        expenseTransactions.forEach(t => {
+            const score = t.necessityScore || 50; // Fallback para transações antigas
+            if (score >= 80) {
+                necessityAnalysis.essential.amount += t.amount;
+                necessityAnalysis.essential.count++;
+            } else if (score >= 60) {
+                necessityAnalysis.important.amount += t.amount;
+                necessityAnalysis.important.count++;
+            } else if (score >= 40) {
+                necessityAnalysis.moderate.amount += t.amount;
+                necessityAnalysis.moderate.count++;
+            } else if (score >= 20) {
+                necessityAnalysis.dispensable.amount += t.amount;
+                necessityAnalysis.dispensable.count++;
+            } else {
+                necessityAnalysis.superfluous.amount += t.amount;
+                necessityAnalysis.superfluous.count++;
+            }
+        });
+
+        // Calcula percentuais
+        for (const level in necessityAnalysis) {
+            necessityAnalysis[level].amount = parseFloat(necessityAnalysis[level].amount.toFixed(2));
+            necessityAnalysis[level].percentage = expenses > 0 
+                ? parseFloat(((necessityAnalysis[level].amount / expenses) * 100).toFixed(1))
+                : 0;
+        }
+
+        // Gastos evitáveis (dispensável + supérfluo)
+        const avoidableExpenses = necessityAnalysis.dispensable.amount + necessityAnalysis.superfluous.amount;
+        const avoidablePercentage = expenses > 0 
+            ? parseFloat(((avoidableExpenses / expenses) * 100).toFixed(1))
+            : 0;
+
         // Verificar orçamento
         let budgetStatus = null;
         if (this.config.monthlyBudget > 0) {
@@ -227,7 +405,10 @@ class FinanceTracker {
                 percentage: ((amount / expenses) * 100).toFixed(1)
             })),
             budgetStatus,
-            averageDailyExpense: parseFloat((expenses / new Date().getDate()).toFixed(2))
+            averageDailyExpense: parseFloat((expenses / new Date().getDate()).toFixed(2)),
+            necessityAnalysis,
+            avoidableExpenses: parseFloat(avoidableExpenses.toFixed(2)),
+            avoidablePercentage
         };
     }
 

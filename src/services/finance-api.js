@@ -30,11 +30,14 @@ function registrarDespesa(userId, valor, categoria, descricao = '') {
         const resumo = tracker.getMonthSummary();
         return {
             sucesso: true,
+            valor: valor,
             valorRegistrado: valor,
             categoria,
+            necessidade: resultado.necessity,
             totalGastoMes: resumo.totalExpenses,
             saldoMes: resumo.balance,
-            orcamento: resumo.budgetStatus
+            orcamento: resumo.budgetStatus,
+            gastoEvitavel: resumo.avoidableExpenses
         };
     } catch (error) {
         console.error('❌ Erro ao registrar despesa:', error.message);
@@ -85,7 +88,10 @@ function obterResumoFinanceiro(userId) {
             mediaDiaria: resumo.averageDailyExpense,
             topCategorias: resumo.byCategory,
             orcamento: resumo.budgetStatus,
-            status: resumo.balance >= 0 ? 'positivo' : 'negativo'
+            status: resumo.balance >= 0 ? 'positivo' : 'negativo',
+            analiseNecessidade: resumo.necessityAnalysis,
+            gastoEvitavel: resumo.avoidableExpenses,
+            percentualEvitavel: resumo.avoidablePercentage
         };
     } catch (error) {
         console.error('❌ Erro ao obter resumo:', error.message);

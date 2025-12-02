@@ -27,6 +27,9 @@ Sistema completo de gerenciamento financeiro pessoal integrado ao WhatsApp via I
 - Média de gasto diário
 - Comparativo com mês anterior
 - Status de orçamento em tempo real
+- **🎯 Análise de necessidade dos gastos (novo!)**
+- **💡 Cálculo de gastos evitáveis**
+- **🌈 Classificação por gradiente de necessidade**
 
 ### 🎯 **Orçamento e Alertas**
 - Definição de orçamento mensal
@@ -164,22 +167,128 @@ Jarvis: 🛒 R$1.700 em Eletrônicos registrado
         💡 Dica: Controle os gastos nos próximos dias!
 ```
 
+## 🎯 Análise de Necessidade dos Gastos
+
+### **Sistema de Classificação Inteligente**
+O Jarvis analisa automaticamente cada despesa e classifica em 5 níveis de necessidade usando um gradiente de 0 a 100:
+
+#### **🔴 Essencial (80-100)**
+Gastos absolutamente necessários para sobrevivência e obrigações básicas:
+- Aluguel, condomínio, IPTU
+- Água, luz, gás
+- Mercado (compras essenciais)
+- Remédios e tratamentos de saúde
+- Transporte para trabalho
+
+**Exemplo:** "Gastei 800 no aluguel" → 🔴 Essencial (Score: 90/100)
+
+#### **🟠 Importante (60-79)**
+Gastos importantes para manutenção da qualidade de vida e desenvolvimento:
+- Combustível, manutenção veicular
+- Cursos e educação
+- Uniformes e equipamentos de trabalho
+- Plano de saúde
+- Internet
+
+**Exemplo:** "Paguei 300 no curso profissionalizante" → 🟠 Importante (Score: 70/100)
+
+#### **🟡 Moderado (40-59)**
+Gastos regulares mas não críticos:
+- Alimentação geral (restaurantes, lanches)
+- Roupas básicas
+- Produtos de higiene e limpeza
+- Transporte eventual
+
+**Exemplo:** "Almoço de 45 reais no restaurante" → 🟡 Moderado (Score: 50/100)
+
+#### **🟢 Dispensável (20-39)**
+Gastos que podem ser evitados com planejamento:
+- Fast food, delivery
+- Doces e guloseimas
+- Compras online não essenciais
+- Pequenos luxos
+
+**Exemplo:** "Pedi pizza pelo iFood, 35 reais" → 🟢 Dispensável (Score: 30/100)
+
+#### **🔵 Supérfluo (0-19)**
+Gastos por impulso ou puramente recreativos:
+- Streaming (Netflix, Spotify)
+- Baladas e festas
+- Games e entretenimento
+- Compras por impulso
+- Cinema, shows
+
+**Exemplo:** "Comprei um game de 150" → 🔵 Supérfluo (Score: 10/100)
+
+### **🧠 Como Funciona a Análise**
+
+O sistema usa 3 fatores para calcular o score:
+
+1. **Palavras-chave na descrição**
+   - Busca por termos específicos: "aluguel", "remédio", "netflix", etc.
+   - Cada palavra tem um peso associado
+
+2. **Categoria padrão**
+   - Moradia e Saúde → tendência Essencial
+   - Lazer → tendência Supérfluo
+   - Outras categorias → classificação por contexto
+
+3. **Modificadores de contexto**
+   - Palavras como "urgente", "essencial", "necessário" → +10 pontos
+   - Palavras como "impulso", "vontade", "desejo" → -15 pontos
+
+**Exemplo de ajuste:**
+```
+"Consulta médica urgente" → Score 90 + 10 (urgente) = 100 (🔴 Essencial)
+"Tênis da moda compra por impulso" → Score 50 - 15 (impulso) = 35 (🟢 Dispensável)
+```
+
+### **💡 Insights Automáticos**
+
+O resumo mensal agora inclui:
+
+```
+🎯 Análise de Necessidade dos Gastos:
+
+🔴 Essencial: R$1.455 (54.9%) - 6 transações
+🟠 Importante: R$500 (18.9%) - 3 transações
+🟡 Moderado: R$410 (15.5%) - 7 transações
+🟢 Dispensável: R$150 (5.7%) - 1 transação
+🔵 Supérfluo: R$135 (5.1%) - 3 transações
+
+💰 Gastos Evitáveis (Dispensável + Supérfluo): R$285 (10.8%)
+ℹ️ Gastos evitáveis moderados. Há espaço para economia.
+```
+
+### **📊 Quando Você Registra um Gasto**
+
+A resposta agora inclui o nível de necessidade:
+
+```
+Usuário: "Gastei 40 no netflix"
+Jarvis: 💸 R$40 registrado em Lazer
+        🔵 Supérfluo (score: 10/100)
+        Total no mês: R$1.200
+        Gastos evitáveis: R$285 (23%)
+```
+
 ## 🔧 Arquitetura Técnica
 
 ### **Componentes**
 1. **FinanceTracker** (`finance-tracker.js`)
    - Core do sistema financeiro
    - Gerencia transações, categorias e orçamentos
+   - **Análise de necessidade automática**
    - Persistência e arquivamento automático
 
 2. **Finance API** (`finance-api.js`)
    - Interface para integração com WhatsApp
-   - Retorna dados estruturados para formatação via IA
+   - Retorna dados estruturados incluindo necessidade
    - Cache de trackers por usuário
 
 3. **Message Handler** (integração)
    - Detecta comandos financeiros via Groq
-   - Formata respostas humanizadas
+   - Formata respostas com análise de necessidade
    - Adiciona ao histórico da conversa
 
 ### **Fluxo de Processamento**
@@ -222,13 +331,14 @@ Resposta Humanizada ao Usuário
 - [ ] Gráficos visuais de gastos
 - [ ] Export para Excel/CSV
 - [ ] Metas de economia
-- [ ] Análise de padrões de consumo
+- [x] **Análise de necessidade dos gastos** ✅
 - [ ] Previsão de gastos futuros (IA)
 - [ ] Integração com bancos (Open Banking)
+- [ ] Sugestões de economia baseadas em padrões
 
 ## 🧪 Testes
 
-Execute o teste completo:
+### **Teste Básico do Sistema**
 ```bash
 node scripts/test-finance.js
 ```
@@ -242,6 +352,21 @@ node scripts/test-finance.js
 - ✅ Alertas de threshold
 - ✅ Comparação mensal
 - ✅ Persistência de dados
+
+### **Teste de Análise de Necessidade**
+```bash
+node scripts/test-necessity-analysis.js
+```
+
+**Validações:**
+- ✅ Classificação Essencial (80-100)
+- ✅ Classificação Importante (60-79)
+- ✅ Classificação Moderado (40-59)
+- ✅ Classificação Dispensável (20-39)
+- ✅ Classificação Supérfluo (0-19)
+- ✅ Ajuste por contexto (urgente/impulso)
+- ✅ Cálculo de gastos evitáveis
+- ✅ Percentuais por nível de necessidade
 
 ## 📝 Notas Técnicas
 

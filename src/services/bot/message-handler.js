@@ -668,8 +668,15 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             const resultado = registrarDespesa(chatId, valor, categoria, descricao);
                             
                             if (!resultado.erro) {
+                                const necessidadeInfo = resultado.necessidade 
+                                    ? `${resultado.necessidade.emoji} ${resultado.necessidade.label} (score: ${resultado.necessidade.score}/100)` 
+                                    : '';
+                                const evitavelInfo = resultado.gastoEvitavel > 0 
+                                    ? `Gastos evitáveis no mês: R$${resultado.gastoEvitavel.toFixed(2)}` 
+                                    : '';
+                                
                                 const partsGroq = [{
-                                    text: `Formatar resposta para usuário que registrou gasto de R$${valor} em ${categoria}. Total gasto no mês: R$${resultado.totalGastoMes}. Saldo: R$${resultado.saldoMes}. ${resultado.orcamento ? `Orçamento: R$${resultado.orcamento.budget}, usado: ${resultado.orcamento.percentage}%` : ''}. Responda de forma objetiva em português. Máximo 3 linhas.`
+                                    text: `Formatar resposta para usuário que registrou gasto de R$${valor} em ${categoria}. ${necessidadeInfo}. Total gasto no mês: R$${resultado.totalGastoMes}. Saldo: R$${resultado.saldoMes}. ${evitavelInfo}. ${resultado.orcamento ? `Orçamento: R$${resultado.orcamento.budget}, usado: ${resultado.orcamento.percentage}%` : ''}. Responda de forma objetiva em português. Máximo 3 linhas.`
                                 }];
                                 respostaFinal = await processarComGroq(partsGroq);
                             } else {
@@ -698,8 +705,12 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             const resumo = obterResumoFinanceiro(chatId);
                             
                             if (!resumo.erro) {
+                                const analiseNecessidade = resumo.analiseNecessidade ? 
+                                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): R$${resumo.gastoEvitavel} (${resumo.percentualEvitavel}% do total).` 
+                                    : '';
+                                
                                 const partsGroq = [{
-                                    text: `Formatar resumo financeiro mensal de forma clara. Receitas: R$${resumo.receitas}, Despesas: R$${resumo.despesas}, Saldo: R$${resumo.saldo} (${resumo.status}). Top categorias: ${resumo.topCategorias.map(c => `${c.category} R$${c.amount}`).join(', ')}. Média diária: R$${resumo.mediaDiaria}. ${resumo.orcamento ? `Orçamento: ${resumo.orcamento.percentage}% usado` : ''}. Responda em português com formatação clara e emojis. Máximo 6 linhas.`
+                                    text: `Formatar resumo financeiro mensal de forma clara. Receitas: R$${resumo.receitas}, Despesas: R$${resumo.despesas}, Saldo: R$${resumo.saldo} (${resumo.status}). Top categorias: ${resumo.topCategorias.map(c => `${c.category} R$${c.amount}`).join(', ')}. Média diária: R$${resumo.mediaDiaria}. ${resumo.orcamento ? `Orçamento: ${resumo.orcamento.percentage}% usado` : ''}. ${analiseNecessidade} Responda em português com formatação clara e emojis. Máximo 8 linhas, destaque os gastos evitáveis.`
                                 }];
                                 respostaFinal = await processarComGroq(partsGroq);
                             } else {
