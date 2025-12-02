@@ -206,6 +206,12 @@ class HydrationTracker {
         const currentMinute = now.getMinutes();
         const currentMinuteOfDay = currentHour * 60 + currentMinute;
 
+        // Verifica se meta foi atingida ANTES de qualquer cálculo
+        const status = this.getStatus();
+        if (status.goalMet) {
+            return { minutes: 0, reason: 'Meta atingida' };
+        }
+
         // Se há dados de consumo, usar análise inteligente
         if (Object.keys(this.data.patterns.hourlyConsumption).length > 0) {
             return this.calcularLembreteInteligente(currentHour, currentMinute);
