@@ -66,10 +66,20 @@ async function handleMessage(msg, client) {
         let shouldProcess = true;
 
         if (isGroup) {
-            // Verifica se o bot foi mencionado
-            const mentions = await msg.getMentions();
+            let isMentioned = false;
             const botId = client.info.wid._serialized;
-            const isMentioned = mentions.some(contact => contact.id._serialized === botId);
+
+            try {
+                // Tenta método nativo
+                const mentions = await msg.getMentions();
+                isMentioned = mentions.some(contact => contact.id._serialized === botId);
+            } catch (err) {
+                // Fallback: verificação manual no corpo da mensagem se a função falhar (erro comum WWebJS)
+                console.warn('⚠️ Falha ao obter menções (bug WWebJS), usando fallback regex:', err.message);
+                const userPart = botId.split('@')[0];
+                const regexMention = new RegExp(`@${userPart}`, 'i');
+                isMentioned = regexMention.test(msg.body);
+            }
 
             // Opcional: Verifica se está respondendo a uma mensagem do bot
             const quotedMsg = msg.hasQuotedMsg ? await msg.getQuotedMessage() : null;
