@@ -76,9 +76,21 @@ async function handleMessage(msg, client) {
             } catch (err) {
                 // Fallback: verificação manual no corpo da mensagem se a função falhar (erro comum WWebJS)
                 console.warn('⚠️ Falha ao obter menções (bug WWebJS), usando fallback regex:', err.message);
+
                 const userPart = botId.split('@')[0];
                 const regexMention = new RegExp(`@${userPart}`, 'i');
-                isMentioned = regexMention.test(msg.body);
+                const regexName = /@(jarvis|bot|assistente)/i; // Fallback por nome também
+
+                const matchNumber = regexMention.test(msg.body);
+                const matchName = regexName.test(msg.body);
+
+                isMentioned = matchNumber || matchName;
+
+                console.log(`🔍 Debug Menção Fallback:`);
+                console.log(`   - Body: "${msg.body}"`);
+                console.log(`   - Regex ID (${regexMention}): ${matchNumber}`);
+                console.log(`   - Regex Nome (${regexName}): ${matchName}`);
+                console.log(`   - Resultado Final: ${isMentioned}`);
             }
 
             // Opcional: Verifica se está respondendo a uma mensagem do bot
