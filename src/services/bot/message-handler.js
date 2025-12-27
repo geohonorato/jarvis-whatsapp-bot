@@ -24,7 +24,7 @@ const {
 
 // Cache temporário para última imagem gerada (por chat)
 const ultimaImagemCache = {};
-const { 
+const {
     getGoogleAuth,
     listarEventos,
     listarEventosAmanha,
@@ -93,7 +93,7 @@ async function handleMessage(msg, client) {
                         await client.sendMessage(chatId, '❌ Erro ao baixar imagem.');
                         return;
                     }
-                    
+
                     const legenda = msg.body || ''; // Pega a legenda/caption
                     console.log(`🖼️ Imagem ${media.mimetype} recebida.` + (legenda ? ` Com legenda: "${legenda}"` : ' Sem legenda.'))
 
@@ -104,7 +104,7 @@ async function handleMessage(msg, client) {
                     } else {
                         // Se não houver legenda, envia um prompt padrão pedindo análise? Ou não envia nada?
                         // Vamos enviar um prompt padrão se não houver legenda.
-                        partsEntrada.push({ text: "Analise esta imagem em detalhes." }); 
+                        partsEntrada.push({ text: "Analise esta imagem em detalhes." });
                     }
                     partsEntrada.push({ inlineData: { data: media.data, mimeType: media.mimetype } }); // Adiciona a imagem
 
@@ -116,11 +116,11 @@ async function handleMessage(msg, client) {
 
                 } catch (error) {
                     console.error('\n❌ Erro ao processar imagem:', error);
-                    adicionarAoHistorico(chatId, 'user', [{text: "[Erro ao processar imagem enviada]"}]);
+                    adicionarAoHistorico(chatId, 'user', [{ text: "[Erro ao processar imagem enviada]" }]);
                     await client.sendMessage(chatId, '❌ Erro inesperado ao processar imagem.');
                 }
                 return; // Importante para não processar como texto depois
-            } 
+            }
             else if (msg.type === 'audio' || msg.type === 'ptt') {
                 console.log('\n🎤 Áudio recebido - processando com sistema híbrido...');
                 try {
@@ -129,7 +129,7 @@ async function handleMessage(msg, client) {
                         await client.sendMessage(chatId, '❌ Erro ao baixar áudio.');
                         return;
                     }
-                    
+
                     console.log(`🎵 Áudio ${media.mimetype} recebido`);
 
                     // Prepara as partes para envio multimodal
@@ -146,7 +146,7 @@ async function handleMessage(msg, client) {
 
                 } catch (error) {
                     console.error('\n❌ Erro ao processar áudio:', error);
-                    adicionarAoHistorico(chatId, 'user', [{text: "[Erro ao processar áudio enviado]"}]);
+                    adicionarAoHistorico(chatId, 'user', [{ text: "[Erro ao processar áudio enviado]" }]);
                     await client.sendMessage(chatId, '❌ Erro inesperado ao processar áudio.');
                 }
                 return;
@@ -154,23 +154,23 @@ async function handleMessage(msg, client) {
             else {
                 console.log(`\n⚠️ Mídia do tipo ${msg.type} recebida, mas não processada.`);
                 // Pode adicionar um marcador ao histórico se quiser
-                adicionarAoHistorico(chatId, 'user', [{text: `[Mídia não suportada recebida: ${msg.type}]`}]);
+                adicionarAoHistorico(chatId, 'user', [{ text: `[Mídia não suportada recebida: ${msg.type}]` }]);
                 // Enviar uma mensagem para o usuário?
                 // await client.sendMessage(chatId, `Desculpe, ainda não consigo processar arquivos do tipo ${msg.type}.`);
                 return; // Importante
             }
-        } 
+        }
         // --- Processamento apenas de Texto ---
         else if (hasText) {
-             console.log('\n📩 Mensagem de texto recebida:', msg.body);
-             // Prepara 'parts' apenas com texto
-             const partsEntrada = [{ text: msg.body }];
-             
-             // Adiciona ao histórico ANTES de enviar
-             adicionarAoHistorico(chatId, 'user', partsEntrada);
-             
-             // Chama a função de processamento (que agora é multimodal)
-             await processarMensagemTexto(client, partsEntrada, chatId);
+            console.log('\n📩 Mensagem de texto recebida:', msg.body);
+            // Prepara 'parts' apenas com texto
+            const partsEntrada = [{ text: msg.body }];
+
+            // Adiciona ao histórico ANTES de enviar
+            adicionarAoHistorico(chatId, 'user', partsEntrada);
+
+            // Chama a função de processamento (que agora é multimodal)
+            await processarMensagemTexto(client, partsEntrada, chatId);
 
         } else {
             console.log("❓ Mensagem recebida sem texto ou mídia suportada.");
@@ -200,39 +200,39 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
 
         // Extrai o texto principal da entrada para verificações de comando (se houver)
         const textoUsuario = partsEntrada.find(p => p.text)?.text || '';
-        
+
         // Verifica se há conteúdo multimodal (imagem, áudio, etc)
         const temConteudoMultimodal = partsEntrada.some(p => p.inlineData);
-        
+
         // SISTEMA HÍBRIDO INTELIGENTE:
         // 1. Se tiver mídia (imagem/áudio/doc) → Gemini analisa/transcreve primeiro
         // 2. Depois envia resultado para Groq tomar decisão
         // 3. Se for apenas texto → Groq direto
-        
+
         let partsParaProcessar = partsEntrada;
-        
+
         if (temConteudoMultimodal) {
             console.log('\n� === SISTEMA HÍBRIDO ATIVADO ===');
             console.log('�🖼️ Conteúdo multimodal detectado');
             console.log('📋 Fase 1/2: Gemini analisa/transcreve o conteúdo...');
-            
+
             // Gemini APENAS analisa/transcreve (não toma decisões)
             const analiseGemini = await analisarConteudoMultimodal(partsEntrada);
-            
+
             if (analiseGemini.startsWith('❌')) {
                 await client.sendMessage(chatId, analiseGemini);
                 return;
             }
-            
+
             console.log('✅ Análise/transcrição concluída');
             console.log('📋 Fase 2/2: Groq processa e decide ação...');
-            
+
             // Prepara o contexto para o Groq com a análise do Gemini
             const contextoUsuario = textoUsuario ? `\nCONTEXTO DO USUÁRIO: "${textoUsuario}"\n\n` : '\n';
             partsParaProcessar = [{
                 text: `${contextoUsuario}[CONTEÚDO ANALISADO/TRANSCRITO]:\n${analiseGemini}\n\nCom base nas informações acima, decida qual ação tomar (conversar, criar evento, gerar imagem, consultar magistério, etc).`
             }];
-            
+
         } else {
             console.log('📝 Apenas texto - processamento direto com Groq (GPT OSS 120b)');
         }
@@ -241,22 +241,22 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
         const pedidoDocumento = /^(envie?|mande?|envia|manda|enviar|mandar)\s+(como|em)\s+documento$/i.test(textoUsuario.trim());
         if (pedidoDocumento && ultimaImagemCache[chatId]) {
             console.log('\n📄 Detectado pedido de reenvio como documento...');
-            
+
             const ultimaImagem = ultimaImagemCache[chatId];
-            
+
             // Verifica se a imagem ainda existe
             if (fs.existsSync(ultimaImagem.imagePath)) {
                 const mediaGerada = MessageMedia.fromFilePath(ultimaImagem.imagePath);
-                
+
                 console.log("📄 Reenviando última imagem como documento...");
                 await client.sendMessage(chatId, mediaGerada, {
                     sendMediaAsDocument: true,
                     caption: '📄 Imagem enviada como documento (qualidade original preservada)'
                 });
-                
+
                 adicionarAoHistorico(chatId, 'user', partsEntrada);
                 adicionarAoHistorico(chatId, 'model', [{ text: '[Imagem Reenviada como Documento]' }]);
-                
+
                 return; // Finaliza aqui
             } else {
                 await client.sendMessage(chatId, '❌ Desculpe, a última imagem já foi removida. Por favor, gere uma nova imagem.');
@@ -265,7 +265,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
         }
 
         // Removida verificação manual shouldUseMagisterium - agora o Gemini identifica
-        
+
         // --- Verificação de Comandos Específicos (Ex: /resumir, /limpar) ---
         if (textoUsuario.toLowerCase().startsWith('/resumir ')) {
             const urlVideo = textoUsuario.substring(9).trim();
@@ -286,11 +286,11 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 await client.sendMessage(chatId, '❌ URL do YouTube inválida. Use o formato: /resumir https://www.youtube.com/watch?v=...');
                 // Adiciona ao histórico
                 adicionarAoHistorico(chatId, 'user', partsEntrada);
-                adicionarAoHistorico(chatId, 'model', [{ text: '❌ URL inválida fornecida.'}]); // Correção: Adiciona a resposta do modelo
+                adicionarAoHistorico(chatId, 'model', [{ text: '❌ URL inválida fornecida.' }]); // Correção: Adiciona a resposta do modelo
                 return;
             }
         }
-        
+
         if (textoUsuario.toLowerCase() === '/limpar') {
             limparHistorico(chatId); // Limpa histórico específico do chat (ou global se preferir)
             await client.sendMessage(chatId, '🧹 Histórico da conversa limpo!');
@@ -303,7 +303,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
         // Verifica também se não é uma legenda de imagem já adicionada na seção de imagem
         const jaAdicionadoComoLegenda = partsEntrada.length > 1 && partsEntrada.some(p => p.inlineData);
         if (!textoUsuario.startsWith('/') && !jaAdicionadoComoLegenda) {
-             adicionarAoHistorico(chatId, 'user', partsEntrada);
+            adicionarAoHistorico(chatId, 'user', partsEntrada);
         }
 
 
@@ -314,7 +314,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
         // SEMPRE usa Groq para decisão final (mais rápido e melhor para raciocínio)
         console.log('🧠 Groq (GPT OSS 120b) processando e decidindo ação...');
         const respostaIA = await processarComGroqPrincipal(partsParaProcessar, historicoParaEnviar);
-        
+
         if (respostaIA && !respostaIA.startsWith('❌')) {
             const partsResposta = [{ text: respostaIA }]; // Prepara resposta para histórico
 
@@ -336,7 +336,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
 
                 // Processa com Magisterium AI e formata com Gemini
                 const respostaMagisterium = await responderMagisteriumComFormatacao(partsMagisterium, historico);
-                
+
                 await client.sendMessage(chatId, respostaMagisterium);
                 adicionarAoHistorico(chatId, 'model', [{ text: respostaMagisterium }]);
                 return;
@@ -380,11 +380,11 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
 
                     // Envia a imagem gerada
                     const mediaGerada = MessageMedia.fromFilePath(resultadoGeracao.imagePath);
-                    
+
                     // Define opções de envio
                     const sendOptions = {};
                     let caption = '';
-                    
+
                     if (resultadoGeracao.sendAsDocument) {
                         // Usuário pediu EXPLICITAMENTE como documento
                         console.log("� Enviando imagem como documento...");
@@ -396,9 +396,9 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         sendOptions.sendMediaAsSticker = false; // Garante que não é sticker
                         caption = '🖼️ Imagem gerada!\n\n💡 _Quer receber como documento para preservar 100% da qualidade? Peça: "envie como documento"_';
                     }
-                    
+
                     sendOptions.caption = caption;
-                    
+
                     await client.sendMessage(chatId, mediaGerada, sendOptions);
                     adicionarAoHistorico(chatId, 'model', [{ text: '[Imagem Gerada com Sucesso]' }]);
 
@@ -408,7 +408,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             imagePath: resultadoGeracao.imagePath,
                             timestamp: Date.now()
                         };
-                        
+
                         // Remove do cache após 5 minutos
                         setTimeout(() => {
                             if (ultimaImagemCache[chatId]?.imagePath === resultadoGeracao.imagePath) {
@@ -450,36 +450,36 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 const ehComandoCalendario = comandosCalendario.some(cmd => respostaIA.startsWith(cmd));
 
 
-                else if (respostaIA.toLowerCase().startsWith('/gasto') || 
-                         respostaIA.toLowerCase().startsWith('/receita') ||
-                         respostaIA.toLowerCase().startsWith('/financas') ||
-                         respostaIA.toLowerCase().startsWith('/transacoes') ||
-                         respostaIA.toLowerCase().startsWith('/orcamento') ||
-                         respostaIA.toLowerCase().startsWith('/comparativo')) {
+                if (respostaIA.toLowerCase().startsWith('/gasto') ||
+                    respostaIA.toLowerCase().startsWith('/receita') ||
+                    respostaIA.toLowerCase().startsWith('/financas') ||
+                    respostaIA.toLowerCase().startsWith('/transacoes') ||
+                    respostaIA.toLowerCase().startsWith('/orcamento') ||
+                    respostaIA.toLowerCase().startsWith('/comparativo')) {
                     console.log('\n💰 Processando comando financeiro gerado pela IA:', respostaIA);
-                    
+
                     try {
                         const primeiraLinha = respostaIA.split('\n')[0].trim();
                         const partes = primeiraLinha.split(' ');
                         const comando = partes[0].toLowerCase();
                         let respostaFinal = null;
-                        
+
                         if (comando === '/gasto') {
                             // /gasto VALOR CATEGORIA DESCRIÇÃO
                             const valor = parseFloat(partes[1]);
                             const categoria = partes[2] || 'Outros';
                             const descricao = partes.slice(3).join(' ') || '';
-                            
+
                             const resultado = registrarDespesa(chatId, valor, categoria, descricao);
-                            
+
                             if (!resultado.erro) {
-                                const necessidadeInfo = resultado.necessidade 
-                                    ? `${resultado.necessidade.emoji} ${resultado.necessidade.label} (score: ${resultado.necessidade.score}/100)` 
+                                const necessidadeInfo = resultado.necessidade
+                                    ? `${resultado.necessidade.emoji} ${resultado.necessidade.label} (score: ${resultado.necessidade.score}/100)`
                                     : '';
-                                const evitavelInfo = resultado.gastoEvitavel > 0 
-                                    ? `Gastos evitáveis no mês: R$${resultado.gastoEvitavel.toFixed(2)}` 
+                                const evitavelInfo = resultado.gastoEvitavel > 0
+                                    ? `Gastos evitáveis no mês: R$${resultado.gastoEvitavel.toFixed(2)}`
                                     : '';
-                                
+
                                 const partsGroq = [{
                                     text: `Formatar resposta para usuário que registrou gasto de R$${valor} em ${categoria}. ${necessidadeInfo}. Total gasto no mês: R$${resultado.totalGastoMes}. Saldo: R$${resultado.saldoMes}. ${evitavelInfo}. ${resultado.orcamento ? `Orçamento: R$${resultado.orcamento.budget}, usado: ${resultado.orcamento.percentage}%` : ''}. Responda de forma objetiva em português. Máximo 3 linhas.`
                                 }];
@@ -493,9 +493,9 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             const valor = parseFloat(partes[1]);
                             const categoria = partes[2] || 'Receita';
                             const descricao = partes.slice(3).join(' ') || '';
-                            
+
                             const resultado = registrarReceita(chatId, valor, categoria, descricao);
-                            
+
                             if (!resultado.erro) {
                                 const partsGroq = [{
                                     text: `Formatar resposta para usuário que registrou receita de R$${valor}. Total de receitas no mês: R$${resultado.totalReceitaMes}. Saldo: R$${resultado.saldoMes}. Responda de forma positiva em português. Máximo 2 linhas.`
@@ -508,12 +508,12 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         else if (comando === '/financas') {
                             // Resumo financeiro
                             const resumo = obterResumoFinanceiro(chatId);
-                            
+
                             if (!resumo.erro) {
-                                const analiseNecessidade = resumo.analiseNecessidade ? 
-                                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): R$${resumo.gastoEvitavel} (${resumo.percentualEvitavel}% do total).` 
+                                const analiseNecessidade = resumo.analiseNecessidade ?
+                                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): R$${resumo.gastoEvitavel} (${resumo.percentualEvitavel}% do total).`
                                     : '';
-                                
+
                                 const partsGroq = [{
                                     text: `Formatar resumo financeiro mensal de forma clara. Receitas: R$${resumo.receitas}, Despesas: R$${resumo.despesas}, Saldo: R$${resumo.saldo} (${resumo.status}). Top categorias: ${resumo.topCategorias.map(c => `${c.category} R$${c.amount}`).join(', ')}. Média diária: R$${resumo.mediaDiaria}. ${resumo.orcamento ? `Orçamento: ${resumo.orcamento.percentage}% usado` : ''}. ${analiseNecessidade} Responda em português com formatação clara e emojis. Máximo 8 linhas, destaque os gastos evitáveis.`
                                 }];
@@ -525,12 +525,12 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         else if (comando === '/transacoes') {
                             // Últimas transações
                             const transacoes = obterUltimasTransacoes(chatId, 5);
-                            
+
                             if (!transacoes.erro && transacoes.quantidade > 0) {
-                                const lista = transacoes.transacoes.map((t, i) => 
-                                    `${i+1}. ${t.tipo}: R$${t.valor} - ${t.categoria} (${t.data})`
+                                const lista = transacoes.transacoes.map((t, i) =>
+                                    `${i + 1}. ${t.tipo}: R$${t.valor} - ${t.categoria} (${t.data})`
                                 ).join('\n');
-                                
+
                                 respostaFinal = `📝 *Últimas ${transacoes.quantidade} transações:*\n\n${lista}`;
                             } else {
                                 respostaFinal = '📝 Nenhuma transação registrada ainda.';
@@ -540,7 +540,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                             // Definir orçamento
                             const valor = parseFloat(partes[1]);
                             const resultado = definirOrcamento(chatId, valor);
-                            
+
                             if (!resultado.erro) {
                                 respostaFinal = `💰 Orçamento mensal definido em R$${valor}! Vou te avisar quando atingir 80% do limite.`;
                             } else {
@@ -550,7 +550,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         else if (comando === '/comparativo') {
                             // Comparação com mês anterior
                             const comparacao = obterComparacao(chatId);
-                            
+
                             if (!comparacao.erro) {
                                 const emoji = comparacao.tendencia === 'Aumento' ? '📈' : comparacao.tendencia === 'Redução' ? '📉' : '➡️';
                                 respostaFinal = `${emoji} *Comparativo Mensal*\n\n` +
@@ -562,7 +562,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                                 respostaFinal = comparacao.mensagem;
                             }
                         }
-                        
+
                         if (respostaFinal) {
                             await client.sendMessage(chatId, respostaFinal);
                             adicionarAoHistorico(chatId, 'model', [{ text: respostaFinal }]);
@@ -572,25 +572,25 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         await client.sendMessage(chatId, '❌ Erro ao processar comando financeiro.');
                     }
                 }
-                else if (ehComandoCalendario) { 
+                else if (ehComandoCalendario) {
                     const respostaCalendario = await processarComandoCalendario(client, respostaIA, chatId); // Passa a string diretamente
                     if (respostaCalendario) {
                         await client.sendMessage(chatId, respostaCalendario);
                         // Adiciona a resposta formatada do calendário ao histórico também
-                        adicionarAoHistorico(chatId, 'model', [{ text: respostaCalendario }]); 
+                        adicionarAoHistorico(chatId, 'model', [{ text: respostaCalendario }]);
                     } else if (respostaIA.startsWith('/evento')) {
-                         const analiseOriginal = respostaIA.split('/evento')[0].trim();
-                         if (analiseOriginal) {
-                             await client.sendMessage(chatId, filtrarPensamentos(analiseOriginal));
-                         } else {
-                             console.log("Comando /evento recebido, mas não gerou ação de calendário nem tinha texto prévio.");
-                         }
+                        const analiseOriginal = respostaIA.split('/evento')[0].trim();
+                        if (analiseOriginal) {
+                            await client.sendMessage(chatId, filtrarPensamentos(analiseOriginal));
+                        } else {
+                            console.log("Comando /evento recebido, mas não gerou ação de calendário nem tinha texto prévio.");
+                        }
                     }
                 } else {
                     await client.sendMessage(chatId, respostaIA);
                 }
             }
-                // Se não houve resposta válida, envia uma mensagem de erro única
+            // Se não houve resposta válida, envia uma mensagem de erro única
             if (!respostaIA || respostaIA.startsWith('❌')) {
                 const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';
                 await client.sendMessage(chatId, mensagemErro);
@@ -622,38 +622,38 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
         switch (comando) {
             case '/evento':
                 // ... (lógica existente para /evento e /add subsequente) ...
-                 const partesEvento = comandoCompleto.split('\n');
-                 // Procura por um /add dentro da resposta /evento
-                 const comandoAddEmEvento = partesEvento.find(p => p.startsWith('/add')); 
-                 if (comandoAddEmEvento) {
-                     console.log('\n📅 Processando evento extraído de imagem/texto...');
-                     try {
-                         const eventoInfo = comandoAddEmEvento.substring(5).trim(); // Remove '/add '
-                         const evento = await adicionarEvento(auth, eventoInfo);
-                         comandoExecutado = true;
-                         const inicio = new Date(evento.start.dateTime || evento.start.date);
-                         const fim = new Date(evento.end.dateTime || evento.end.date);
-                         mensagemResposta = `> *Evento Adicionado com Sucesso (Extraído)* ✨\n\n` +
-                                            `📝 *${evento.summary}*\n` +
-                                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
-                                            (evento.description ? `📋 ${evento.description}\n` : '') +
-                                            (evento.location ? `📍 ${evento.location}\n` : '');
-                     } catch (error) {
-                         console.error('\n❌ Erro ao adicionar evento extraído:', error);
-                         mensagemResposta = `❌ Erro ao adicionar o evento extraído: ${error.message || 'Verifique o formato.'}`;
-                     }
-                 } else {
-                     console.log('\n⚠️ Comando /evento sem /add subsequente.');
-                     // Retorna null para que a análise da imagem/texto original seja enviada
-                     return null; 
-                 }
-                 break; // Sai do switch para /evento
+                const partesEvento = comandoCompleto.split('\n');
+                // Procura por um /add dentro da resposta /evento
+                const comandoAddEmEvento = partesEvento.find(p => p.startsWith('/add'));
+                if (comandoAddEmEvento) {
+                    console.log('\n📅 Processando evento extraído de imagem/texto...');
+                    try {
+                        const eventoInfo = comandoAddEmEvento.substring(5).trim(); // Remove '/add '
+                        const evento = await adicionarEvento(auth, eventoInfo);
+                        comandoExecutado = true;
+                        const inicio = new Date(evento.start.dateTime || evento.start.date);
+                        const fim = new Date(evento.end.dateTime || evento.end.date);
+                        mensagemResposta = `> *Evento Adicionado com Sucesso (Extraído)* ✨\n\n` +
+                            `📝 *${evento.summary}*\n` +
+                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
+                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                            (evento.description ? `📋 ${evento.description}\n` : '') +
+                            (evento.location ? `📍 ${evento.location}\n` : '');
+                    } catch (error) {
+                        console.error('\n❌ Erro ao adicionar evento extraído:', error);
+                        mensagemResposta = `❌ Erro ao adicionar o evento extraído: ${error.message || 'Verifique o formato.'}`;
+                    }
+                } else {
+                    console.log('\n⚠️ Comando /evento sem /add subsequente.');
+                    // Retorna null para que a análise da imagem/texto original seja enviada
+                    return null;
+                }
+                break; // Sai do switch para /evento
 
-             case '/add':
-                 // Trata múltiplos /add se estiverem na mesma linha (improvável, mas seguro) ou múltiplas linhas
-                 const comandosAdd = comandoCompleto.split('\n').filter(cmd => cmd.trim().startsWith('/add'));
-                 if (comandosAdd.length > 1) {
+            case '/add':
+                // Trata múltiplos /add se estiverem na mesma linha (improvável, mas seguro) ou múltiplas linhas
+                const comandosAdd = comandoCompleto.split('\n').filter(cmd => cmd.trim().startsWith('/add'));
+                if (comandosAdd.length > 1) {
                     console.log('\n📅 Processando múltiplos eventos...');
                     let eventosAdicionados = [];
                     let erros = [];
@@ -668,10 +668,10 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                             erros.push(cmdAdd); // Guarda o comando que falhou
                         }
                     }
-                     // ... (lógica de formatação da resposta para múltiplos eventos) ...
-                     if (eventosAdicionados.length > 0) {
+                    // ... (lógica de formatação da resposta para múltiplos eventos) ...
+                    if (eventosAdicionados.length > 0) {
                         mensagemResposta = `> *${eventosAdicionados.length} Evento(s) Adicionado(s) com Sucesso* ✨\n\n`;
-                        eventosAdicionados.forEach((evento) => { 
+                        eventosAdicionados.forEach((evento) => {
                             const inicio = new Date(evento.start.dateTime || evento.start.date);
                             const fim = new Date(evento.end.dateTime || evento.end.date);
                             mensagemResposta += `📝 *${evento.summary}*\n`;
@@ -680,37 +680,37 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                             if (evento.description) mensagemResposta += `📋 ${evento.description}\n`;
                             if (evento.location) mensagemResposta += `📍 ${evento.location}\n`;
                             mensagemResposta += '\n';
-                         });
+                        });
                     }
-                    if (erros.length > 0) { 
+                    if (erros.length > 0) {
                         mensagemResposta += `\n❌ Falha ao adicionar ${erros.length} evento(s). Verifique os dados e tente novamente.`;
                     }
                     if (eventosAdicionados.length === 0 && erros.length > 0) {
-                         mensagemResposta = `❌ Falha ao adicionar evento(s). Verifique os dados e tente novamente.`;
-                     }
+                        mensagemResposta = `❌ Falha ao adicionar evento(s). Verifique os dados e tente novamente.`;
+                    }
 
-                 } else { // Apenas um /add
+                } else { // Apenas um /add
                     console.log('\n📅 Processando evento único...');
                     try {
                         const eventoInfo = comandoCompleto.substring(5).trim(); // Remove '/add '
                         const evento = await adicionarEvento(auth, eventoInfo);
                         comandoExecutado = true;
                         // ... (lógica de formatação da resposta para evento único) ...
-                         const inicio = new Date(evento.start.dateTime || evento.start.date);
-                         const fim = new Date(evento.end.dateTime || evento.end.date);
-                         mensagemResposta = `> *Evento Adicionado com Sucesso* ✨\n\n` +
-                                           `📝 *${evento.summary}*\n` +
-                                           `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                                           `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
-                                           (evento.description ? `📋 ${evento.description}\n` : '') +
-                                           (evento.location ? `📍 ${evento.location}\n` : '');
+                        const inicio = new Date(evento.start.dateTime || evento.start.date);
+                        const fim = new Date(evento.end.dateTime || evento.end.date);
+                        mensagemResposta = `> *Evento Adicionado com Sucesso* ✨\n\n` +
+                            `📝 *${evento.summary}*\n` +
+                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
+                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                            (evento.description ? `📋 ${evento.description}\n` : '') +
+                            (evento.location ? `📍 ${evento.location}\n` : '');
 
                     } catch (error) {
-                         console.error('\n❌ Erro ao adicionar evento único:', error);
-                         mensagemResposta = `❌ Erro ao adicionar evento: ${error.message || 'Verifique o formato.'}`;
+                        console.error('\n❌ Erro ao adicionar evento único:', error);
+                        mensagemResposta = `❌ Erro ao adicionar evento: ${error.message || 'Verifique o formato.'}`;
                     }
-                 }
-                 break; // Sai do switch para /add
+                }
+                break; // Sai do switch para /add
 
             case '/list': // Mantém lógica anterior para /list com args
             case '/today':
@@ -767,13 +767,13 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                         mensagemResposta = '❌ Formato de data inválido para /date. Use AAAA-MM-DD.';
                     }
                 } else if (periodo === 'proximos' || periodo === 'next') {
-                     // const count = args[0] ? parseInt(args[0]) : 10; // Pega a contagem se houver (opcional)
-                     eventos = await listarProximosEventos(auth); // Usa a função padrão que lista 10
-                     titulo = `Próximos ${eventos.length} Eventos`;
+                    // const count = args[0] ? parseInt(args[0]) : 10; // Pega a contagem se houver (opcional)
+                    eventos = await listarProximosEventos(auth); // Usa a função padrão que lista 10
+                    titulo = `Próximos ${eventos.length} Eventos`;
                 } else if (comando === '/list' && args.length > 0) { // Tratamento de /list com args não mapeados
                     console.warn("Comando /list com argumento não padrão:", args);
-                     eventos = await listarEventos(auth);
-                     titulo = "Eventos para Hoje (Argumento /list não reconhecido)";
+                    eventos = await listarEventos(auth);
+                    titulo = "Eventos para Hoje (Argumento /list não reconhecido)";
                 } else { // Fallback para /list sem args ou comando não reconhecido aqui
                     eventos = await listarEventos(auth); // Lista eventos de hoje por padrão
                     titulo = "Eventos para Hoje";
@@ -800,39 +800,39 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     mensagemResposta = '❌ ID do evento não fornecido para remoção via /remove.';
                 }
                 break; // Sai do switch para /remove
-            
-            case '/delete':
-                 // TODO: Implementar a lógica de conversação para exclusão de eventos.
-                 comandoExecutado = true;
-                 console.log('\n🗑️ Recebido comando /delete, iniciando fluxo de remoção...');
-                 // A lógica original de /delete iniciava uma conversa.
-                 // Como o LLM retorna apenas /delete, precisamos decidir como lidar com isso.
-                 // Opção 1: Listar eventos de hoje para o usuário escolher.
-                 const eventosHoje = await listarEventos(auth); // Lista eventos de hoje
-                 if (eventosHoje && eventosHoje.length > 0) {
-                     let listaParaRemover = "Qual evento você gostaria de remover? Responda com o número:\n\n";
-                     eventosHoje.forEach((evento, index) => {
-                         const inicio = new Date(evento.start.dateTime || evento.start.date);
-                         listaParaRemover += `${index + 1}. *${evento.summary}* (${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})\n`;
-                     });
-                     mensagemResposta = listaParaRemover;
-                     
-                     // Define o estado da conversa para aguardar a seleção do usuário
-                     if (!chatId) {
-                         console.error('❌ ChatId não definido no comando /delete');
-                         mensagemResposta = "❌ Erro interno: ChatId não encontrado.";
-                     } else {
-                         conversationState[chatId] = {
-                             action: 'awaiting_delete_selection',
-                             events: eventosHoje
-                         };
-                         console.log(`📝 Estado definido para ${chatId}: aguardando seleção para remoção.`);
-                     }
 
-                 } else {
-                     mensagemResposta = "📅 Não há eventos hoje para remover.";
-                 }
-                 break; // Sai do switch para /delete
+            case '/delete':
+                // TODO: Implementar a lógica de conversação para exclusão de eventos.
+                comandoExecutado = true;
+                console.log('\n🗑️ Recebido comando /delete, iniciando fluxo de remoção...');
+                // A lógica original de /delete iniciava uma conversa.
+                // Como o LLM retorna apenas /delete, precisamos decidir como lidar com isso.
+                // Opção 1: Listar eventos de hoje para o usuário escolher.
+                const eventosHoje = await listarEventos(auth); // Lista eventos de hoje
+                if (eventosHoje && eventosHoje.length > 0) {
+                    let listaParaRemover = "Qual evento você gostaria de remover? Responda com o número:\n\n";
+                    eventosHoje.forEach((evento, index) => {
+                        const inicio = new Date(evento.start.dateTime || evento.start.date);
+                        listaParaRemover += `${index + 1}. *${evento.summary}* (${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})\n`;
+                    });
+                    mensagemResposta = listaParaRemover;
+
+                    // Define o estado da conversa para aguardar a seleção do usuário
+                    if (!chatId) {
+                        console.error('❌ ChatId não definido no comando /delete');
+                        mensagemResposta = "❌ Erro interno: ChatId não encontrado.";
+                    } else {
+                        conversationState[chatId] = {
+                            action: 'awaiting_delete_selection',
+                            events: eventosHoje
+                        };
+                        console.log(`📝 Estado definido para ${chatId}: aguardando seleção para remoção.`);
+                    }
+
+                } else {
+                    mensagemResposta = "📅 Não há eventos hoje para remover.";
+                }
+                break; // Sai do switch para /delete
 
 
             default:
