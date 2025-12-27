@@ -18,17 +18,42 @@ try {
     console.error('Erro ao carregar cache Pascom:', e);
 }
 
-// Carrega config (Group ID)
-function getPascomGroupId() {
+// Carrega config (Group ID) ou busca pelo nome
+async function getPascomGroupId(client) {
     try {
+        // 1. Variável de Ambiente
         if (process.env.COORDENACAO_GROUP_ID) return process.env.COORDENACAO_GROUP_ID;
+
+        // 2. Arquivo Local (Cache)
         if (fs.existsSync(CONFIG_PATH)) {
             const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-            return config.groupId;
+            if (config.groupId) return config.groupId;
         }
-    } catch (e) { }
+
+        // 3. Busca por NOME (Fallback persistente via código)
+        // Nome padrão ou configurado
+        const targetName = process.env.COORDENACAO_GROUP_NAME || '•|°COORDENAÇÃO PASCOM°|';
+
+        console.log(`🔍 Buscando grupo por nome: "${targetName}"...`);
+        const chats = await client.getChats();
+        const targetGroup = chats.find(chat => chat.isGroup && chat.name === targetName);
+
+        if (targetGroup) {
+            console.log(`✅ Grupo encontrado pelo nome! ID: ${targetGroup.id._serialized}`);
+            // Salva no cache para evitar busca na próxima vez
+            setPascomGroupId(targetGroup.id._serialized);
+            return targetGroup.id._serialized;
+        } else {
+            console.log(`⚠️ Grupo "${targetName}" não encontrado.`);
+        }
+
+    } catch (e) {
+        console.error('Erro ao buscar ID do grupo Pascom:', e);
+    }
     return null;
 }
+
+
 
 // Salva ID do grupo
 function setPascomGroupId(groupId) {
@@ -54,9 +79,9 @@ function saveCache() {
 }
 
 async function checarEventosPascom(client) {
-    const groupId = getPascomGroupId();
+    const groupId = await getPascomGroupId(client);
     if (!groupId) {
-        console.log('⚠️ Verificação Pascom ignorada: ID do grupo não configurado.');
+        console.log('⚠️ Verificação Pascom ignorada: ID do grupo não configurado e grupo não encontrado por nome.');
         return;
     }
 
