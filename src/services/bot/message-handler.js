@@ -84,6 +84,8 @@ async function handleMessage(msg, client) {
                 console.log(`🔔 Mensagem de grupo (${chatId}) ACEITA (Menção: ${isMentioned}, Resposta: ${isQuotingBot})`);
             }
         }
+
+        // --- Lógica de Estado para Remoção de Evento ---
         if (conversationState[chatId] && conversationState[chatId].action === 'awaiting_delete_selection') {
             const selection = parseInt(lowerCaseBody, 10);
             const events = conversationState[chatId].events;
@@ -223,6 +225,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
 
         // Extrai o texto principal da entrada para verificações de comando (se houver)
         const textoUsuario = partsEntrada.find(p => p.text)?.text || '';
+        const lowerCaseBody = textoUsuario.toLowerCase();
 
         // Verifica se há conteúdo multimodal (imagem, áudio, etc)
         const temConteudoMultimodal = partsEntrada.some(p => p.inlineData);
