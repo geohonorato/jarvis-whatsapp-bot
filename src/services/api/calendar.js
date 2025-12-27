@@ -406,6 +406,21 @@ async function adicionarEvento(auth, eventoInfo, targetCalendarId = null) {
 
         const calendarId = targetCalendarId || CALENDAR_ID;
 
+        // Verifica conflitos
+        console.log(`\n🔍 Verificando conflitos no calendário (${calendarId})...`);
+        const conflitos = await calendar.events.list({
+            calendarId: calendarId,
+            timeMin: new Date(dataInicio).toISOString(),
+            timeMax: new Date(dataFim).toISOString(),
+            singleEvents: true,
+            timeZone: 'America/Sao_Paulo'
+        });
+
+        if (conflitos.data.items && conflitos.data.items.length > 0) {
+            console.log('⚠️ Conflito detectado:', conflitos.data.items[0].summary);
+            throw new Error(`Conflito de horário! Já existe o evento: "${conflitos.data.items[0].summary}" neste horário.`);
+        }
+
         const response = await calendar.events.insert({
             calendarId: calendarId,
             resource: evento,
