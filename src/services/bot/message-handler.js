@@ -11,19 +11,7 @@ const {
 const { responderMagisteriumComFormatacao } = require('../magisterium');
 const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
-const { hydrationHandlers, getOrCreateTracker } = require('../hydration-example');
-const { getOrCreateBottleTracker } = require('../hydration-bottle');
-const { obterDadosHidratacao, registrarConsumo, obterStatusRapido } = require('../hydration-api');
-const {
-    iniciarLembretesHidratacao,
-    pausarLembretesHidratacao,
-    retomarLembretesHidratacao,
-    getStatusLembretes
-} = require('../hydration-reminders');
-const {
-    handleBottleCommand,
-    detectAndProcessBottleIntent
-} = require('../hydration-bottle-handlers');
+
 const {
     registrarDespesa,
     registrarReceita,
@@ -64,122 +52,13 @@ async function handleMessage(msg, client) {
         const hasText = !!msg.body; // Verifica se há texto na mensagem
 
         // --- INICIA LEMBRETES AUTOMATICAMENTE ---
-        iniciarLembretesHidratacao(client, chatId);
 
-        // --- Verificação de Comandos de Hidratação ---
-        if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber') ||
-            lowerCaseBody.startsWith('/hidratação') || lowerCaseBody.startsWith('/hydration') ||
-            lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report') ||
-            lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
-            
-            try {
-                let resposta;
-                const bottleTracker = getOrCreateBottleTracker(chatId);
-                
-                if (lowerCaseBody.startsWith('/agua') || lowerCaseBody.startsWith('/beber')) {
-                    const quantidade = parseInt(msg.body.split(' ')[1]) || 250;
-                    bottleTracker.registerWater(quantidade, 'user');
-                    const status = bottleTracker.mainTracker.getStatus();
-                    resposta = `💧 *Água registrada: ${quantidade}ml!*\n\n📊 *Hoje:* ${status.totalToday}ml / ${status.dailyGoal}ml (${status.percentage}%)\n⏳ *Faltam:* ${status.remaining}ml\n\n${status.status}`;
-                    iniciarLembretesHidratacao(client, chatId);
-                } else if (lowerCaseBody.startsWith('/relatorio') || lowerCaseBody.startsWith('/report')) {
-                    resposta = bottleTracker.getBottleReport();
-                } else if (lowerCaseBody.startsWith('/lembrete') || lowerCaseBody.startsWith('/remind')) {
-                    const tracker = bottleTracker.mainTracker;
-                    const lembrete = tracker.gerarLembrete();
-                    resposta = `${lembrete.message}\n\n⏰ *Próximo lembrete em:* ${lembrete.proximoLembreteEm.minutes || lembrete.proximoLembreteEm}min`;
-                    iniciarLembretesHidratacao(client, chatId);
-                } else {
-                    const status = bottleTracker.getBottleStatus();
-                    resposta = status.summary || `💧 *HIDRATAÇÃO - STATUS DO DIA*\n\n${status.bottle.visual}\n\nTotal: ${status.totalMl}ml / ${status.goalMl}ml (${status.percentage}%)\nFaltam: ${status.remainingMl}ml`;
-                }
-                
-                adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-                adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
-                await client.sendMessage(chatId, resposta);
-                return; // Não processa como mensagem normal
-            } catch (error) {
-                console.error('❌ Erro ao processar comando de hidratação:', error);
-                await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
-                return;
-            }
-        }
 
-        // --- Comandos de Gerenciamento de Lembretes ---
-        if (lowerCaseBody === '/pausar lembretes' || lowerCaseBody === '/pausar' || 
-            lowerCaseBody === '/parar lembretes' || lowerCaseBody === '/desativar lembretes') {
-            pausarLembretesHidratacao(chatId);
-            const resposta = '⏸️ Lembretes de hidratação pausados. Diga "/retomar" para ativar novamente.';
-            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
-            await client.sendMessage(chatId, resposta);
-            return;
-        }
 
-        if (lowerCaseBody === '/retomar lembretes' || lowerCaseBody === '/retomar' || 
-            lowerCaseBody === '/reativar lembretes' || lowerCaseBody === '/ativar lembretes') {
-            retomarLembretesHidratacao(client, chatId);
-            const resposta = '▶️ Lembretes de hidratação retomados!';
-            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
-            await client.sendMessage(chatId, resposta);
-            return;
-        }
 
-        if (lowerCaseBody === '/status lembretes' || lowerCaseBody === '/status' || 
-            lowerCaseBody === '/quando' || lowerCaseBody === '/próximo') {
-            const status = getStatusLembretes(chatId);
-            const resposta = status.ativo 
-                ? `⏰ ${status.mensagem}` 
-                : `❌ ${status.mensagem}`;
-            adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-            adicionarAoHistorico(chatId, 'model', [{ text: resposta }]);
-            await client.sendMessage(chatId, resposta);
-            return;
-        }
 
-        // --- Verificação de Comandos de GARRAFA ---
-        // Detecta padrões: "garrafa cheia", "bebida 50%", "tamanho 750", "nome Térmica", etc
-        if (lowerCaseBody.includes('garrafa') || lowerCaseBody.includes('bebida') ||
-            lowerCaseBody.includes('tamanho') || lowerCaseBody.includes('nome') ||
-            lowerCaseBody.includes('terminei') || lowerCaseBody.includes('relatorio')) {
-            
-            try {
-                // Tenta processar como comando de garrafa
-                let respostaGarrafa = await handleBottleCommand(msg.body, chatId);
-                
-                if (respostaGarrafa) {
-                    // Se foi um comando de garrafa válido
-                    adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-                    adicionarAoHistorico(chatId, 'model', [{ text: respostaGarrafa }]);
-                    
-                    // Inicia lembretes
-                    iniciarLembretesHidratacao(client, chatId);
-                    
-                    await client.sendMessage(chatId, respostaGarrafa);
-                    return;
-                }
-                
-                // Se não foi reconhecido como comando de garrafa, tenta detecção de intent natural
-                respostaGarrafa = await detectAndProcessBottleIntent(msg.body, chatId);
-                
-                if (respostaGarrafa) {
-                    // Se detectou intenção de garrafa em linguagem natural
-                    adicionarAoHistorico(chatId, 'user', [{ text: msg.body }]);
-                    adicionarAoHistorico(chatId, 'model', [{ text: respostaGarrafa }]);
-                    
-                    // Inicia lembretes
-                    iniciarLembretesHidratacao(client, chatId);
-                    
-                    await client.sendMessage(chatId, respostaGarrafa);
-                    return;
-                }
-                // Se não foi garrafa, continua para próximas verificações
-            } catch (error) {
-                console.error('❌ Erro ao processar comando de garrafa:', error);
-                // Não interrompe, continua processamento
-            }
-        }
+
+
 
         // --- Lógica de Estado para Remoção de Evento ---
         if (conversationState[chatId] && conversationState[chatId].action === 'awaiting_delete_selection') {
@@ -570,81 +449,7 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 const comandosCalendario = ['/add', '/list', '/remove', '/evento', '/today', '/tomorrow', '/week', '/nextweek', '/month', '/nextmonth', '/date', '/delete', '/next'];
                 const ehComandoCalendario = comandosCalendario.some(cmd => respostaIA.startsWith(cmd));
 
-                // Verifica se a resposta é um comando de hidratação
-                const comandosHidratacao = ['/agua', '/beber', '/hidratacao', '/hydration', '/relatorio', '/report', '/lembrete', '/remind'];
-                const ehComandoHidratacao = comandosHidratacao.some(cmd => respostaIA.toLowerCase().startsWith(cmd));
 
-                if (ehComandoHidratacao) {
-                    console.log('\n💧 Processando comando de hidratação gerado pela IA:', respostaIA);
-                    
-                    try {
-                        const primeiraLinha = respostaIA.split('\n')[0].toLowerCase().trim();
-                        let respostaFinal = null;
-                        
-                        if (primeiraLinha.startsWith('/agua') || primeiraLinha.startsWith('/beber')) {
-                            // Registra consumo
-                            const quantidade = parseInt(primeiraLinha.split(' ')[1]) || 250;
-                            const resultado = registrarConsumo(chatId, quantidade, 'ia');
-                            
-                            if (!resultado.erro) {
-                                // Envia para Groq formatar a resposta
-                                const partsGroq = [{
-                                    text: `Formatar uma resposta amigável para o usuário ter registrado ${quantidade}ml de água. Consumo atual: ${resultado.consumidoHoje}ml de ${resultado.metaDiaria}ml (${resultado.percentual}%). Faltam: ${resultado.faltam}ml. Responda de forma encorajadora e positiva, em português do Brasil. Máximo 3 linhas.`
-                                }];
-                                respostaFinal = await processarComGroq(partsGroq);
-                                iniciarLembretesHidratacao(client, chatId);
-                            } else {
-                                respostaFinal = resultado.mensagem;
-                            }
-                        } 
-                        else if (primeiraLinha.startsWith('/hidratacao') || primeiraLinha.startsWith('/hydration')) {
-                            // Consulta status
-                            const dados = obterDadosHidratacao(chatId);
-                            
-                            if (!dados.erro) {
-                                // Envia dados para Groq formatar
-                                const partsGroq = [{
-                                    text: `Formatar status de hidratação de forma clara e amigável. Consumo: ${dados.consumidoHoje}ml de ${dados.metaDiaria}ml (${dados.percentual}%). Faltam: ${dados.faltam}ml. Garrafa: ${dados.garrafa.nome} (${dados.garrafa.tamanho}ml). Status: ${dados.statusCritico}. Responda em português do Brasil com emojis. Máximo 4 linhas.`
-                                }];
-                                respostaFinal = await processarComGroq(partsGroq);
-                            } else {
-                                respostaFinal = dados.mensagem;
-                            }
-                        } 
-                        else if (primeiraLinha.startsWith('/lembrete') || primeiraLinha.startsWith('/remind')) {
-                            // Lembretes - usa dados frescos via hidratacao-api
-                            const dados = obterDadosHidratacao(chatId);
-                            
-                            const mensagensLembrete = [
-                                `💧 Hidratação: ${dados.percentual}% da meta (${dados.consumidoHoje}ml/${dados.metaDiaria}ml). Faltam ${dados.faltam}ml!`,
-                                `🚰 Beba água! Você consumiu ${dados.consumidoHoje}ml. Objetivo: ${dados.metaDiaria}ml. Faltam ${dados.faltam}ml.`,
-                                `⏰ Hora de beber! Status: ${dados.percentual}%. Ingestão de hoje: ${dados.consumidoHoje}ml/${dados.metaDiaria}ml`,
-                                `💪 Mantenha a hidratação! Faltam ${dados.faltam}ml para atingir a meta de ${dados.metaDiaria}ml!`,
-                            ];
-                            
-                            const mensagemLembrete = mensagensLembrete[Math.floor(Math.random() * mensagensLembrete.length)];
-                            respostaFinal = `${mensagemLembrete}\n\n⏰ *Próximo lembrete em:* ${dados.proximoLembrete.minutos || dados.proximoLembrete}min`;
-                            iniciarLembretesHidratacao(client, chatId);
-                        } 
-                        else if (primeiraLinha.startsWith('/relatorio') || primeiraLinha.startsWith('/report')) {
-                            // Relatório formatado via Groq
-                            const dados = obterDadosHidratacao(chatId);
-                            const partsGroq = [{
-                                text: `Gerar relatório de hidratação detalhado e bem formatado. Consumo: ${dados.consumidoHoje}ml de ${dados.metaDiaria}ml (${dados.percentual}%). Faltam: ${dados.faltam}ml. Garrafa: ${dados.garrafa.nome} (${dados.garrafa.tamanho}ml). Próximo lembrete em ${dados.proximoLembrete.minutos} minutos. Responda em português do Brasil com formatação clara e emojis. Máximo 8 linhas.`
-                            }];
-                            respostaFinal = await processarComGroq(partsGroq);
-                        }
-                        
-                        if (respostaFinal) {
-                            await client.sendMessage(chatId, respostaFinal);
-                            adicionarAoHistorico(chatId, 'model', [{ text: respostaFinal }]);
-                        }
-                    } catch (error) {
-                        console.error('❌ Erro ao processar hidratação:', error.message);
-                        await client.sendMessage(chatId, '❌ Erro ao processar comando de hidratação.');
-                    }
-                }
-                // Verifica se a resposta é um comando de controle financeiro
                 else if (respostaIA.toLowerCase().startsWith('/gasto') || 
                          respostaIA.toLowerCase().startsWith('/receita') ||
                          respostaIA.toLowerCase().startsWith('/financas') ||

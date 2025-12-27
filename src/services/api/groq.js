@@ -102,39 +102,7 @@ Quando receber informações sobre eventos que acontecem em vários dias:
 2. Use "Dia 1", "Dia 2", "Dia 3", etc. no título
 3. Mantenha a ordem cronológica dos dias
 
-HIDRATAÇÃO E SAÚDE:
-Quando o usuário mencionar beber água, ter sede, pedir lembretes de hidratação, ou qualquer referência a consumo de água/líquidos:
 
-REGRAS DE OURO:
-1. Se for REGISTRAR consumo (user disse "bebi", "tomei", "consumi"), retorne: /agua QUANTIDADE
-2. Se for CONSULTAR status (user perguntou "quanto bebi", "quanto falta", "meu progresso"), retorne: /hidratacao
-3. Se for PEDIR LEMBRETE, retorne: /lembrete
-4. Se for PERGUNTA GENÉRICA sobre hidratação, responda naturalmente SEM comandos
-5. Nunca combine /agua com texto - o sistema e Gemini tratam disso
-
-Exemplos CORRETOS:
-Usuário: "Bebi 500ml de água agora"
-Você: /agua 500
-
-Usuário: "Quanto de água eu ja bebi hoje?"
-Você: /hidratacao
-
-Usuário: "Quanto falta para completar a meta?"
-Você: /hidratacao
-
-Usuário: "Quantos litros de água eu deveria beber por dia?"
-Você: A recomendação é beber cerca de 2 a 3 litros de água por dia, o que corresponde a 8-10 copos. Mas isso pode variar conforme sua atividade física, clima e saúde pessoal. 💧
-
-Usuário: "Tomei um copo grande de água"
-Você: /agua 350
-
-Usuário: "Me lembra de beber água regularmente"
-Você: /lembrete
-
-IMPORTANTE - HIDRATAÇÃO:
-- Retorne APENAS o comando (/agua, /hidratacao, /lembrete) SEM texto adicional
-- Sistema processará e Gemini formatará a resposta
-- Para perguntas genéricas, responda normalmente SEM comandos
 
 CONTROLE FINANCEIRO:
 Quando o usuário mencionar gastos, compras, despesas, receitas, salário, dinheiro, orçamento ou finanças:
@@ -259,7 +227,7 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
 
     try {
         console.log(`\n🧠 Processando entrada com Groq... (tentativa ${tentativa}/${MAX_RETRIES})`);
-        
+
         // Prepara o histórico
         const historicoGroq = formatarHistoricoParaGroq(historico);
 
@@ -303,10 +271,10 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
             // Se for erro de Rate Limit ou API Overloaded e ainda não excedemos o máximo de tentativas
             if ((error.status === 429 || error.status === 503) && tentativa < MAX_RETRIES) {
                 console.log(`\n⚠️ API sobrecarregada, tentando novamente em ${DELAY_BASE * tentativa}ms...`);
-                
+
                 // Espera um tempo exponencial antes de tentar novamente
                 await new Promise(resolve => setTimeout(resolve, DELAY_BASE * tentativa));
-                
+
                 // Tenta novamente com incremento na contagem de tentativas
                 return processarMensagemMultimodal(parts, historico, tentativa + 1);
             }
@@ -344,17 +312,17 @@ async function processarComGroq(parts, tentativa = 1) {
     const DELAY_BASE = 2000;
 
     try {
-        console.log(`\n💧 Processando formatação de hidratação com Groq... (tentativa ${tentativa}/${MAX_RETRIES})`);
-        
+        console.log(`\n💬 Processando formatação com Groq... (tentativa ${tentativa}/${MAX_RETRIES})`);
+
         const promptAtual = parts.map(part => part.text || '').join('\n');
 
         try {
             const response = await groqClient.post('/chat/completions', {
                 ...defaultOptions,
                 messages: [
-                    { 
-                        role: 'system', 
-                        content: `Você é especialista em formatação de mensagens de hidratação. Responda SEMPRE em português do Brasil com emojis. Seja encorajador, positivo e motivador. Nunca inclua explicações técnicas.` 
+                    {
+                        role: 'system',
+                        content: `Você é um assistente especialista em formatação de mensagens. Responda SEMPRE em português do Brasil com emojis quando apropriado. Seja claro, objetivo e útil. Nunca inclua explicações técnicas ou tags de pensamento.`
                     },
                     { role: 'user', content: promptAtual }
                 ]
@@ -377,8 +345,8 @@ async function processarComGroq(parts, tentativa = 1) {
         }
 
     } catch (error) {
-        console.error('\n❌ Erro ao processar hidratação com Groq:', error.message);
-        return '❌ Erro ao processar sua solicitação de hidratação.';
+        console.error('\n❌ Erro ao processar formatação com Groq:', error.message);
+        return '❌ Erro ao processar sua solicitação.';
     }
 }
 
