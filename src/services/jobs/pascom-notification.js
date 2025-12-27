@@ -31,12 +31,18 @@ async function getPascomGroupId(client) {
         }
 
         // 3. Busca por NOME (Fallback persistente via código)
-        // Nome padrão ou configurado
-        const targetName = process.env.COORDENACAO_GROUP_NAME || '•|°COORDENAÇÃO PASCOM°|•';
+        // Prioridade: Grupo de Teste "My" > Grupo Oficial "•|°COORDENAÇÃO PASCOM°|•"
+        const targetNames = ['My', process.env.COORDENACAO_GROUP_NAME || '•|°COORDENAÇÃO PASCOM°|•'];
 
-        console.log(`🔍 Buscando grupo por nome: "${targetName}"...`);
+        console.log(`🔍 Buscando grupos por nome (Prioridade: ${targetNames.join(', ')})...`);
         const chats = await client.getChats();
-        const targetGroup = chats.find(chat => chat.isGroup && chat.name === targetName);
+
+        // Encontra o primeiro grupo da lista que existe no WhatsApp
+        let targetGroup = null;
+        for (const name of targetNames) {
+            targetGroup = chats.find(chat => chat.isGroup && chat.name === name);
+            if (targetGroup) break;
+        }
 
         if (targetGroup) {
             console.log(`✅ Grupo encontrado pelo nome! ID: ${targetGroup.id._serialized}`);
