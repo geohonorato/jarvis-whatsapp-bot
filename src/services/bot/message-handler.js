@@ -79,17 +79,20 @@ async function handleMessage(msg, client) {
 
                 const userPart = botId.split('@')[0];
                 const regexMention = new RegExp(`@${userPart}`, 'i');
-                const regexName = /@(jarvis|bot|assistente)/i; // Fallback por nome também
+                const regexName = /@(jarvis|bot|assistente|calendar|passcom)/i;
+                const regexPhoneVar = /@(55)?(91)?(9)?81703506/i;
 
                 const matchNumber = regexMention.test(msg.body);
                 const matchName = regexName.test(msg.body);
+                const matchPhone = regexPhoneVar.test(msg.body);
 
-                isMentioned = matchNumber || matchName;
+                isMentioned = matchNumber || matchName || matchPhone;
 
                 console.log(`🔍 Debug Menção Fallback:`);
                 console.log(`   - Body: "${msg.body}"`);
                 console.log(`   - Regex ID (${regexMention}): ${matchNumber}`);
                 console.log(`   - Regex Nome (${regexName}): ${matchName}`);
+                console.log(`   - Regex Phone (${regexPhoneVar}): ${matchPhone}`);
                 console.log(`   - Resultado Final: ${isMentioned}`);
             }
 
