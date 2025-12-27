@@ -80,6 +80,8 @@ async function handleMessage(msg, client) {
                 const userPart = botId.split('@')[0];
                 const regexMention = new RegExp(`@${userPart}`, 'i');
                 const regexName = /@(jarvis|bot|assistente|calendar|passcom)/i;
+                // Regex para cobrir variações do número (com ou sem 9, com ou sem +55)
+                // Explicito para 559181703506 conforme solicitado
                 const regexPhoneVar = /@(55)?(91)?(9)?81703506/i;
 
                 const matchNumber = regexMention.test(msg.body);
