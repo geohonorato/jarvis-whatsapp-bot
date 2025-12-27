@@ -38,7 +38,8 @@ const {
     adicionarEvento,
     removerEvento,
     formatarEventos,
-    CALENDAR_ID
+    CALENDAR_ID,
+    PASCOM_CALENDAR_ID
 } = require('../api/calendar');
 const { MessageMedia } = require("whatsapp-web.js");
 const fs = require('fs');
@@ -773,6 +774,29 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     }
                 }
                 break; // Sai do switch para /add
+
+            case '/add_pascom':
+                console.log('\n📅 Processando evento PASCOM...');
+                try {
+                    const eventoInfo = comandoCompleto.substring(12).trim(); // Remove '/add_pascom '
+                    // Passa o ID do calendário da Pascom
+                    const evento = await adicionarEvento(auth, eventoInfo, PASCOM_CALENDAR_ID);
+                    comandoExecutado = true;
+
+                    const inicio = new Date(evento.start.dateTime || evento.start.date);
+                    const fim = new Date(evento.end.dateTime || evento.end.date);
+                    mensagemResposta = `> *Evento PASCOM Adicionado* ⛪✨\n\n` +
+                        `📝 *${evento.summary}*\n` +
+                        `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
+                        `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                        (evento.description ? `📋 ${evento.description}\n` : '') +
+                        (evento.location ? `📍 ${evento.location}\n` : '');
+
+                } catch (error) {
+                    console.error('\n❌ Erro ao adicionar evento Pascom:', error);
+                    mensagemResposta = `❌ Erro ao adicionar evento na Pascom: ${error.message}`;
+                }
+                break;
 
             case '/list': // Mantém lógica anterior para /list com args
             case '/today':

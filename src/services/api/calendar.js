@@ -382,7 +382,7 @@ async function listarEventosData(auth, data) {
     }
 }
 
-async function adicionarEvento(auth, eventoInfo) {
+async function adicionarEvento(auth, eventoInfo, targetCalendarId = null) {
     try {
         const calendar = google.calendar({ version: 'v3', auth });
 
@@ -404,12 +404,14 @@ async function adicionarEvento(auth, eventoInfo) {
 
         if (local) evento.location = local;
 
+        const calendarId = targetCalendarId || CALENDAR_ID;
+
         const response = await calendar.events.insert({
-            calendarId: CALENDAR_ID,
+            calendarId: calendarId,
             resource: evento,
         });
 
-        console.log('\n✅ Evento adicionado:', response.data);
+        console.log(`\n✅ Evento adicionado (Calendar: ${calendarId}):`, response.data);
         return response.data;
     } catch (error) {
         console.error('\n❌ Erro ao adicionar evento:', error);

@@ -153,8 +153,14 @@ IMPORTANTE - FINANÇAS:
 - Se valor não for claro, pergunte ao usuário
 - Retorne APENAS o comando SEM texto adicional (sistema processará)
 
+
+PARA EVENTOS DA PASCOM / IGREJA:
+- Se o usuário mencionar explicitamente adicionar na "Pascom", "Igreja", "Pastoral", "Coordenação" ou "Calendário da Igreja":
+- Use o comando: /add_pascom TÍTULO | DATA_HORA_INÍCIO | DATA_HORA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
+
 Para gerenciar eventos do Google Calendar, use os seguintes comandos quando apropriado:
-- Para adicionar um evento: /add TÍTULO | DATA_HORA_INÍCIO | DATA_HORA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
+- Para adicionar um evento PESSOAL: /add TÍTULO | DATA_HORA_INÍCIO | DATA_HORA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
+- Para adicionar um evento PASCOM: /add_pascom TÍTULO ... (mesmo formato)
 - Para eventos do dia ou de hoje: /today
 - Para próximos eventos ou agenda: /schedule
 - Para eventos de amanhã: /tomorrow
