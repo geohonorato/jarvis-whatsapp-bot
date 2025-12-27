@@ -32,7 +32,7 @@ async function getPascomGroupId(client) {
 
         // 3. Busca por NOME (Fallback persistente via código)
         // Nome padrão ou configurado
-        const targetName = process.env.COORDENACAO_GROUP_NAME || '•|°COORDENAÇÃO PASCOM°|';
+        const targetName = process.env.COORDENACAO_GROUP_NAME || '•|°COORDENAÇÃO PASCOM°|•';
 
         console.log(`🔍 Buscando grupo por nome: "${targetName}"...`);
         const chats = await client.getChats();
