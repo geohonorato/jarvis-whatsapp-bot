@@ -1,4 +1,4 @@
-const { PASCOM_CALENDAR_ID, getGoogleAuth } = require('../api/calendar');
+const { PASCOM_CALENDAR_ID, CALENDAR_ID, getGoogleAuth } = require('../api/calendar');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
@@ -94,6 +94,13 @@ function saveCache() {
 
 async function checarEventosPascom(client) {
     const groupId = await getPascomGroupId(client);
+
+    // DEBUG: Verificando IDs
+    console.log('\n🔍 --- DEBUG CALENDÁRIOS ---');
+    console.log('📅 PASCOM_ID:', PASCOM_CALENDAR_ID);
+    console.log('👤 PERSONAL_ID:', CALENDAR_ID);
+    console.log('---------------------------\n');
+
     if (!groupId) {
         // console.log('⚠️ Verificação Pascom ignorada: ID do grupo não configurado.');
         return;
