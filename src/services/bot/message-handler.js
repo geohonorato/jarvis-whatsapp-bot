@@ -692,11 +692,22 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     console.log('\n📅 Processando evento extraído de imagem/texto...');
                     try {
                         const eventoInfo = comandoAddEmEvento.substring(5).trim(); // Remove '/add '
-                        const evento = await adicionarEvento(auth, eventoInfo);
+
+                        // Lógica de Roteamento de Calendário por Contexto
+                        // Se for grupo (@g.us), usa Pascom. Se for privado, usa Pessoal.
+                        const isGroup = chatId.endsWith('@g.us');
+                        const targetCalendar = isGroup ? PASCOM_CALENDAR_ID : null;
+
+                        const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
                         comandoExecutado = true;
+
                         const inicio = new Date(evento.start.dateTime || evento.start.date);
                         const fim = new Date(evento.end.dateTime || evento.end.date);
-                        mensagemResposta = `> *Evento Adicionado com Sucesso (Extraído)* ✨\n\n` +
+
+                        const emojiTipo = isGroup ? '⛪' : '✨';
+                        const nomeCalendario = isGroup ? 'PASCOM' : 'Pessoal';
+
+                        mensagemResposta = `> *Evento Adicionado com Sucesso (${nomeCalendario})* ${emojiTipo}\n\n` +
                             `📝 *${evento.summary}*\n` +
                             `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
                             `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
@@ -714,6 +725,12 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                 break; // Sai do switch para /evento
 
             case '/add':
+                // Lógica de Roteamento de Calendário por Contexto
+                const isGroup = chatId.endsWith('@g.us');
+                const targetCalendar = isGroup ? PASCOM_CALENDAR_ID : null;
+                const emojiTipo = isGroup ? '⛪' : '✨';
+                const nomeCalendario = isGroup ? 'PASCOM' : ''; // Sem nome para pessoal para manter limpo
+
                 // Trata múltiplos /add se estiverem na mesma linha (improvável, mas seguro) ou múltiplas linhas
                 const comandosAdd = comandoCompleto.split('\n').filter(cmd => cmd.trim().startsWith('/add'));
                 if (comandosAdd.length > 1) {
@@ -723,7 +740,7 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     for (const cmdAdd of comandosAdd) {
                         try {
                             const eventoInfo = cmdAdd.trim().substring(5); // Remove '/add '
-                            const evento = await adicionarEvento(auth, eventoInfo);
+                            const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
                             eventosAdicionados.push(evento);
                             comandoExecutado = true;
                         } catch (error) {
@@ -733,7 +750,7 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     }
                     // ... (lógica de formatação da resposta para múltiplos eventos) ...
                     if (eventosAdicionados.length > 0) {
-                        mensagemResposta = `> *${eventosAdicionados.length} Evento(s) Adicionado(s) com Sucesso* ✨\n\n`;
+                        mensagemResposta = `> *${eventosAdicionados.length} Evento(s) Adicionado(s) com Sucesso ${nomeCalendario}* ${emojiTipo}\n\n`;
                         eventosAdicionados.forEach((evento) => {
                             const inicio = new Date(evento.start.dateTime || evento.start.date);
                             const fim = new Date(evento.end.dateTime || evento.end.date);
@@ -756,12 +773,12 @@ async function processarComandoCalendario(client, comandoCompleto, chatId) {
                     console.log('\n📅 Processando evento único...');
                     try {
                         const eventoInfo = comandoCompleto.substring(5).trim(); // Remove '/add '
-                        const evento = await adicionarEvento(auth, eventoInfo);
+                        const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
                         comandoExecutado = true;
                         // ... (lógica de formatação da resposta para evento único) ...
                         const inicio = new Date(evento.start.dateTime || evento.start.date);
                         const fim = new Date(evento.end.dateTime || evento.end.date);
-                        mensagemResposta = `> *Evento Adicionado com Sucesso* ✨\n\n` +
+                        mensagemResposta = `> *Evento Adicionado com Sucesso ${nomeCalendario}* ${emojiTipo}\n\n` +
                             `📝 *${evento.summary}*\n` +
                             `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
                             `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
