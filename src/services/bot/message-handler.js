@@ -60,7 +60,29 @@ async function handleMessage(msg, client) {
 
 
 
-        // --- Lógica de Estado para Remoção de Evento ---
+        // --- VERIFICAÇÃO DE GRUPO E MENÇÃO ---
+        const isGroup = chatId.endsWith('@g.us');
+        let shouldProcess = true;
+
+        if (isGroup) {
+            // Verifica se o bot foi mencionado
+            const mentions = await msg.getMentions();
+            const botId = client.info.wid._serialized;
+            const isMentioned = mentions.some(contact => contact.id._serialized === botId);
+
+            // Opcional: Verifica se está respondendo a uma mensagem do bot
+            const quotedMsg = msg.hasQuotedMsg ? await msg.getQuotedMessage() : null;
+            const isQuotingBot = quotedMsg && quotedMsg.fromMe;
+
+            if (!isMentioned && !isQuotingBot) {
+                // Se for grupo e não foi mencionado nem citado, ignora silenciosamente
+                shouldProcess = false;
+                // console.log(`🔇 Mensagem de grupo (${chatId}) ignorada (sem menção).`);
+                return;
+            } else {
+                console.log(`🔔 Mensagem de grupo (${chatId}) ACEITA (Menção: ${isMentioned}, Resposta: ${isQuotingBot})`);
+            }
+        }
         if (conversationState[chatId] && conversationState[chatId].action === 'awaiting_delete_selection') {
             const selection = parseInt(lowerCaseBody, 10);
             const events = conversationState[chatId].events;
