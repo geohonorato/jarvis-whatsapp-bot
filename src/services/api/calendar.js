@@ -148,6 +148,7 @@ async function getGoogleAuth() {
 
         const client = await auth.getClient();
         console.log('✅ Autenticação Google Calendar bem-sucedida!');
+        console.log('📧 Email do Bot (Service Account):', credentials.client_email);
         return client;
     } catch (error) {
         console.error('❌ Erro na autenticação Google Calendar:', error.message);
