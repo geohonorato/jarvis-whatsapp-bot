@@ -9,6 +9,7 @@ const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
 // ID do calendário
 const CALENDAR_ID = process.env.CALENDAR_ID;
+const PASCOM_CALENDAR_ID = process.env.PASCOM_CALENDAR_ID;
 
 // Função para obter as credenciais (de variável de ambiente ou arquivo)
 function sanitizeAndParseGoogleCredentials(raw) {
@@ -24,9 +25,9 @@ function sanitizeAndParseGoogleCredentials(raw) {
     let input = safeTrim(raw);
 
     // Remove aspas encapsuladoras acidentais (", ' ou `) no começo/fim
-        if ((input.startsWith('"') && input.endsWith('"')) ||
-            (input.startsWith("'") && input.endsWith("'")) ||
-            (input.startsWith('`') && input.endsWith('`'))) {
+    if ((input.startsWith('"') && input.endsWith('"')) ||
+        (input.startsWith("'") && input.endsWith("'")) ||
+        (input.startsWith('`') && input.endsWith('`'))) {
         input = input.slice(1, -1);
     }
 
@@ -38,7 +39,7 @@ function sanitizeAndParseGoogleCredentials(raw) {
         }
         console.log('🔑 GOOGLE_CREDENTIALS (JSON) parseada com sucesso');
         return parsed;
-    } catch {}
+    } catch { }
 
     // 2) Base64 -> JSON
     try {
@@ -49,7 +50,7 @@ function sanitizeAndParseGoogleCredentials(raw) {
         }
         console.log('🔑 GOOGLE_CREDENTIALS (base64) parseada com sucesso');
         return parsed;
-    } catch {}
+    } catch { }
 
     // 3) Formato key=value (várias linhas), comum quando colado de forma incorreta
     // Ex.: type=service_account\nproject_id=...\nprivate_key=-----BEGIN PRIVATE KEY-----\n...
@@ -90,20 +91,20 @@ function sanitizeAndParseGoogleCredentials(raw) {
             console.log('🔑 GOOGLE_CREDENTIALS (key=value) parseada com sucesso');
             return normalized;
         }
-    } catch {}
+    } catch { }
 
     // 4) Tentativa de reparar chaves não-aspadas: {type: '...', project_id: '...'} → JSON
     try {
         let repaired = input
             .replace(/([,{\s])([A-Za-z0-9_]+)\s*:/g, '$1"$2":') // aspa chaves
-                .replace(/'([^']*)'/g, '"$1"'); // troca aspas simples por duplas em valores
+            .replace(/'([^']*)'/g, '"$1"'); // troca aspas simples por duplas em valores
         const parsed = JSON.parse(repaired);
         if (parsed && parsed.private_key && parsed.private_key.includes('\\n')) {
             parsed.private_key = parsed.private_key.replace(/\\n/g, '\n');
         }
         console.log('🔑 GOOGLE_CREDENTIALS (reparada) parseada com sucesso');
         return parsed;
-    } catch {}
+    } catch { }
 
     console.error('❌ Falha ao interpretar GOOGLE_CREDENTIALS. Conteúdo inválido ou formato não reconhecido.');
     throw new Error('GOOGLE_CREDENTIALS inválida - forneça JSON válido ou base64 do JSON');
@@ -115,17 +116,17 @@ function getCredentials() {
         console.log('🔑 Usando credenciais da variável de ambiente GOOGLE_CREDENTIALS');
         return sanitizeAndParseGoogleCredentials(process.env.GOOGLE_CREDENTIALS);
     }
-    
+
     // Fallback para arquivo local
     const credentialsPath = path.join(__dirname, '../../../credentials.json');
     console.log('📂 Buscando credenciais em arquivo:', credentialsPath);
-    
+
     if (!existsSync(credentialsPath)) {
         console.error('❌ credentials.json não encontrado e GOOGLE_CREDENTIALS não definida!');
         console.error('💡 Dica: Adicione GOOGLE_CREDENTIALS como variável de ambiente ou coloque credentials.json na raiz do projeto');
         throw new Error('Credenciais do Google Calendar não encontradas');
     }
-    
+
     const fileRaw = readFileSync(credentialsPath, 'utf8');
     const creds = JSON.parse(fileRaw);
     if (creds && creds.private_key && creds.private_key.includes('\\n')) {
@@ -137,7 +138,7 @@ function getCredentials() {
 async function getGoogleAuth() {
     try {
         console.log('🔑 Iniciando autenticação com Google Calendar...');
-        
+
         const credentials = getCredentials();
 
         const auth = new google.auth.GoogleAuth({
@@ -158,14 +159,14 @@ async function getGoogleAuth() {
 }
 
 function verificarDataHora() {
-  const agora = new Date();
-  console.log('Data e hora do sistema:', {
-    raw: agora,
-    local: agora.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
-    iso: agora.toISOString(),
-    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    systemTime: process.env.TZ
-  });
+    const agora = new Date();
+    console.log('Data e hora do sistema:', {
+        raw: agora,
+        local: agora.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+        iso: agora.toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        systemTime: process.env.TZ
+    });
 }
 
 async function listarEventos(auth) {
@@ -217,12 +218,12 @@ async function listarEventosProximos(auth) {
 async function listarEventosAmanha(auth) {
     try {
         const calendar = google.calendar({ version: 'v3', auth });
-        
+
         // Configura as datas para amanhã
         const amanha = new Date();
         amanha.setDate(amanha.getDate() + 1);
         amanha.setHours(0, 0, 0, 0);
-        
+
         const fimAmanha = new Date(amanha);
         fimAmanha.setHours(23, 59, 59, 999);
 
@@ -239,7 +240,7 @@ async function listarEventosAmanha(auth) {
             orderBy: 'startTime',
             timeZone: 'America/Sao_Paulo'
         });
-        
+
         return res.data.items || [];
     } catch (error) {
         console.error('\n❌ Erro ao listar eventos de amanhã:', error);
@@ -266,21 +267,21 @@ async function listarEventosPeriodo(calendar, inicio, fim) {
 }
 
 async function listarEventosSemana(auth) {
-    const calendar = google.calendar({version: 'v3', auth});
+    const calendar = google.calendar({ version: 'v3', auth });
     const inicio = new Date();
     const fim = new Date();
     fim.setDate(inicio.getDate() + 7);
-    
+
     return await listarEventosPeriodo(calendar, inicio, fim);
 }
 
 async function listarEventosProximaSemana(auth) {
-    const calendar = google.calendar({version: 'v3', auth});
+    const calendar = google.calendar({ version: 'v3', auth });
     const inicio = new Date();
     inicio.setDate(inicio.getDate() + 7);
     const fim = new Date(inicio);
     fim.setDate(inicio.getDate() + 7);
-    
+
     return await listarEventosPeriodo(calendar, inicio, fim);
 }
 
@@ -289,12 +290,12 @@ async function listarEventosMes(auth) {
     const inicioMes = new Date();
     inicioMes.setDate(1);
     inicioMes.setHours(0, 0, 0, 0);
-    
+
     const fimMes = new Date(inicioMes);
     fimMes.setMonth(fimMes.getMonth() + 1);
     fimMes.setDate(0);
     fimMes.setHours(23, 59, 59, 999);
-    
+
     try {
         console.log('\n📅 Listando eventos do mês atual');
         const res = await calendar.events.list({
@@ -313,19 +314,19 @@ async function listarEventosMes(auth) {
 
 async function listarEventosProximoMes(auth) {
     const calendar = google.calendar({ version: 'v3', auth });
-    
+
     // Obtém o primeiro dia do próximo mês
     const inicioProximoMes = new Date();
     inicioProximoMes.setMonth(inicioProximoMes.getMonth() + 1);
     inicioProximoMes.setDate(1);
     inicioProximoMes.setHours(0, 0, 0, 0);
-    
+
     // Obtém o último dia do próximo mês
     const fimProximoMes = new Date(inicioProximoMes);
     fimProximoMes.setMonth(fimProximoMes.getMonth() + 1);
     fimProximoMes.setDate(0);
     fimProximoMes.setHours(23, 59, 59, 999);
-    
+
     try {
         console.log('\n📅 Listando eventos do próximo mês:', {
             inicio: inicioProximoMes.toLocaleDateString('pt-BR'),
@@ -351,11 +352,11 @@ async function listarEventosProximoMes(auth) {
 
 async function listarEventosData(auth, data) {
     const calendar = google.calendar({ version: 'v3', auth });
-    
+
     // Ajusta para exatamente 00:00 até 23:59 do dia
     const dataInicio = data + 'T00:00:00-03:00';
     const dataFim = data + 'T23:59:59-03:00';
-    
+
     try {
         console.log(`\n📅 Listando eventos para ${data}`, {
             inicio: dataInicio,
@@ -382,11 +383,11 @@ async function listarEventosData(auth, data) {
 
 async function adicionarEvento(auth, eventoInfo) {
     try {
-        const calendar = google.calendar({version: 'v3', auth});
-        
+        const calendar = google.calendar({ version: 'v3', auth });
+
         // Parse das informações do evento
         const [titulo, dataInicio, dataFim, descricao, local] = eventoInfo.split('|').map(item => item.trim());
-        
+
         const evento = {
             summary: titulo,
             description: descricao,
@@ -416,29 +417,29 @@ async function adicionarEvento(auth, eventoInfo) {
 }
 
 async function listarEventosParaDeletar(auth, data) {
-  try {
-    const calendar = google.calendar({ version: 'v3', auth });
-    
-    // Configura as datas para o dia especificado
-    const inicio = new Date(data);
-    inicio.setHours(0, 0, 0, 0);
-    
-    const fim = new Date(data);
-    fim.setHours(23, 59, 59, 999);
+    try {
+        const calendar = google.calendar({ version: 'v3', auth });
 
-    const res = await calendar.events.list({
-      calendarId: CALENDAR_ID,
-      timeMin: inicio.toISOString(),
-      timeMax: fim.toISOString(),
-      singleEvents: true,
-      orderBy: 'startTime'
-    });
-    
-    return res.data.items;
-  } catch (error) {
-    console.error('Erro ao listar eventos para deletar:', error);
-    throw error;
-  }
+        // Configura as datas para o dia especificado
+        const inicio = new Date(data);
+        inicio.setHours(0, 0, 0, 0);
+
+        const fim = new Date(data);
+        fim.setHours(23, 59, 59, 999);
+
+        const res = await calendar.events.list({
+            calendarId: CALENDAR_ID,
+            timeMin: inicio.toISOString(),
+            timeMax: fim.toISOString(),
+            singleEvents: true,
+            orderBy: 'startTime'
+        });
+
+        return res.data.items;
+    } catch (error) {
+        console.error('Erro ao listar eventos para deletar:', error);
+        throw error;
+    }
 }
 
 
@@ -446,7 +447,7 @@ async function listarEventosParaDeletar(auth, data) {
 function formatarEventosData(eventos, data) {
     const dataObj = new Date(data);
     const dataFormatada = dataObj.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    
+
     if (!eventos || eventos.length === 0) {
         return `📅 Não há eventos programados para ${dataFormatada}.`;
     }
@@ -564,7 +565,7 @@ async function criarEventoDeTexto(auth, texto) {
 async function listarProximosEventos(auth) {
     const calendar = google.calendar({ version: 'v3', auth });
     const agora = new Date();
-    
+
     try {
         console.log(`\n📅 Listando próximos 10 eventos`);
         const res = await calendar.events.list({
@@ -583,32 +584,33 @@ async function listarProximosEventos(auth) {
 
 // Adicionar tratamento de erros
 async function listEvents() {
-  try {
-    // ...existing code...
-  } catch (error) {
-    console.error('Erro ao listar eventos:', error);
-    throw error;
-  }
+    try {
+        // ...existing code...
+    } catch (error) {
+        console.error('Erro ao listar eventos:', error);
+        throw error;
+    }
 }
 
 // Remover exportação não utilizada
 module.exports = {
-  getGoogleAuth,
-  verificarDataHora,
-  listarEventos,
-  listarEventosAmanha,
-  listarEventosSemana,
-  listarEventosData,
-  adicionarEvento,
-  CALENDAR_ID,
-  listarEventosParaDeletar,
-  formatarEventos,
-  formatarEventosData,
-  removerEvento,
-  criarEventoDeTexto,
-  listarEventosProximaSemana,
-  listarEventosMes,
-  listarEventosProximoMes,
-  listarEventosPeriodo,
-  listarProximosEventos
+    getGoogleAuth,
+    verificarDataHora,
+    listarEventos,
+    listarEventosAmanha,
+    listarEventosSemana,
+    listarEventosData,
+    adicionarEvento,
+    CALENDAR_ID,
+    listarEventosParaDeletar,
+    formatarEventos,
+    formatarEventosData,
+    removerEvento,
+    criarEventoDeTexto,
+    listarEventosProximaSemana,
+    listarEventosMes,
+    listarEventosProximoMes,
+    listarEventosPeriodo,
+    listarProximosEventos,
+    PASCOM_CALENDAR_ID
 };

@@ -11,6 +11,7 @@ const {
 const { responderMagisteriumComFormatacao } = require('../magisterium');
 const { processarComandoImagem } = require('../api/image-generator');
 const { resumirVideoYoutube } = require('../api/youtube');
+const { setPascomGroupId } = require('../jobs/pascom-notification');
 
 const {
     registrarDespesa,
@@ -593,6 +594,16 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                         console.error('❌ Erro ao processar comando financeiro:', error.message);
                         await client.sendMessage(chatId, '❌ Erro ao processar comando financeiro.');
                     }
+                }
+                // --- SETUP COMMAND ---
+                else if (respostaIA.toLowerCase().trim() === '/setup pascom' || lowerCaseBody === '/setup pascom') {
+                    if (isGroup) {
+                        setPascomGroupId(chatId);
+                        await client.sendMessage(chatId, '✅ Este grupo foi configurado como o grupo oficial da **PASCOM**! Notificações do calendário serão enviadas aqui.');
+                    } else {
+                        await client.sendMessage(chatId, '❌ Este comando deve ser usado dentro de um grupo.');
+                    }
+                    return;
                 }
                 else if (ehComandoCalendario) {
                     const respostaCalendario = await processarComandoCalendario(client, respostaIA, chatId); // Passa a string diretamente

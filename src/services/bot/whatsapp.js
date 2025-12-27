@@ -4,6 +4,7 @@ const qrcode = require("qrcode-terminal");
 const path = require('path');
 const fs = require('fs');
 const { iniciarVerificacaoLembretes } = require('../reminders');
+const { iniciarJobPascom } = require('../jobs/pascom-notification');
 const { handleMessage } = require('./message-handler');
 
 let qrGerado = false;
@@ -15,12 +16,12 @@ function limparCacheAuth() {
     try {
         const authPath = path.join(process.cwd(), '.wwebjs_auth');
         const cachePath = path.join(process.cwd(), '.wwebjs_cache');
-        
+
         if (fs.existsSync(authPath)) {
             fs.rmSync(authPath, { recursive: true, force: true });
             console.log('🧹 Cache de autenticação limpo');
         }
-        
+
         if (fs.existsSync(cachePath)) {
             fs.rmSync(cachePath, { recursive: true, force: true });
             console.log('🧹 Cache do navegador limpo');
@@ -45,7 +46,7 @@ function detectarChromiumPath() {
                 console.log(`🧭 Chromium encontrado em: ${p}`);
                 return p;
             }
-        } catch {}
+        } catch { }
     }
     console.warn('⚠️ Caminho do Chromium não encontrado nos candidatos padrão. Puppeteer tentará autodetectar.');
     return undefined;
@@ -101,12 +102,13 @@ client.on('ready', () => {
     console.log('\n✅ Bot iniciado com sucesso!');
     tentativasReconexao = 0; // Reset contador de tentativas
     iniciarVerificacaoLembretes(client);
+    iniciarJobPascom(client);
 });
 
 client.on('auth_failure', msg => {
     console.error('\n❌ Falha na autenticação:', msg);
     tentativasReconexao++;
-    
+
     if (tentativasReconexao <= maxTentativasReconexao) {
         console.log(`🔄 Tentativa de reconexão ${tentativasReconexao}/${maxTentativasReconexao}...`);
         setTimeout(() => {
@@ -119,7 +121,7 @@ client.on('auth_failure', msg => {
         console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
         tentativasReconexao = 0;
         setTimeout(() => {
-            try { limparCacheAuth(); } catch {}
+            try { limparCacheAuth(); } catch { }
             client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
         }, 10000);
     }
@@ -128,7 +130,7 @@ client.on('auth_failure', msg => {
 client.on('disconnected', reason => {
     console.log('\n⚠️ WhatsApp desconectado:', reason);
     tentativasReconexao++;
-    
+
     if (tentativasReconexao <= maxTentativasReconexao) {
         console.log(`🔄 Tentativa de reconexão ${tentativasReconexao}/${maxTentativasReconexao}...`);
         setTimeout(() => {
@@ -141,7 +143,7 @@ client.on('disconnected', reason => {
         console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
         tentativasReconexao = 0;
         setTimeout(() => {
-            try { limparCacheAuth(); } catch {}
+            try { limparCacheAuth(); } catch { }
             client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
         }, 10000);
     }
@@ -171,17 +173,17 @@ async function inicializarCliente() {
         await client.initialize();
     } catch (err) {
         console.error('❌ Falha ao inicializar o cliente WhatsApp:', err);
-        
+
         // Se for erro de contexto destruído ou protocolo, limpa cache e tenta novamente
-        if (err.message.includes('Execution context was destroyed') || 
+        if (err.message.includes('Execution context was destroyed') ||
             err.message.includes('Protocol error') ||
-            err.message.includes('auth') || 
+            err.message.includes('auth') ||
             err.message.includes('session') ||
             err.message.includes('Target closed')) {
-            
+
             console.log('🧹 Limpando cache devido a erro de contexto/protocolo...');
             limparCacheAuth();
-            
+
             // Aguarda um pouco e tenta novamente
             setTimeout(async () => {
                 try {
@@ -190,7 +192,7 @@ async function inicializarCliente() {
                 } catch (retryErr) {
                     console.error('❌ Falha na segunda tentativa:', retryErr);
                     console.log('🔄 Tentando uma última vez com configuração alternativa...');
-                    
+
                     // Última tentativa com configuração mais simples
                     setTimeout(async () => {
                         try {
