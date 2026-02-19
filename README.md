@@ -91,8 +91,8 @@ Bot:  🚨 ALERTA DE PREÇO! Caiu para R$ 189,90!
 - **Vídeos** → Download e conversão com FFmpeg
 
 ### ❄️ Controle de Ar-Condicionado
-- Integração com sistema IR local via Flask API
-- Controle de temperatura, modo, ventilação e swing
+- Controle remoto via internet (API web)
+- Ajuste de temperatura, modo, ventilação e swing
 - Status em tempo real de múltiplas unidades
 
 ### ⛪ Magisterium AI
@@ -152,7 +152,7 @@ src/
 │   ├── finance-tracker.js            # Sistema financeiro
 │   ├── finance-api.js                # API de finanças
 │   ├── magisterium.js                # Magisterium AI client
-│   ├── acService.js                  # AC IR controller
+│   ├── acService.js                  # Controle AC via internet
 │   └── reminders.js                  # Lembretes de eventos
 └── utils/
     ├── cache.js                      # Cache em memória
