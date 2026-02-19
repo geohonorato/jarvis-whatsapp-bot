@@ -5,17 +5,21 @@ const path = require('path');
 const fs = require('fs');
 const { iniciarVerificacaoLembretes } = require('../reminders');
 const { iniciarJobPascom } = require('../jobs/pascom-notification');
+const { iniciarScheduler } = require('../jobs/scheduler');
 const { handleMessage } = require('./message-handler');
 
 let qrGerado = false;
 let tentativasReconexao = 0;
 const maxTentativasReconexao = 3;
+let inicializando = false;
+let botPronto = false;
 
 // Função para limpar cache de autenticação
 function limparCacheAuth() {
     try {
-        const authPath = path.join(process.cwd(), '.wwebjs_auth');
-        const cachePath = path.join(process.cwd(), '.wwebjs_cache');
+        const dataDir = path.join(process.cwd(), 'data');
+        const authPath = path.join(dataDir, '.wwebjs_auth');
+        const cachePath = path.join(dataDir, '.wwebjs_cache');
 
         if (fs.existsSync(authPath)) {
             fs.rmSync(authPath, { recursive: true, force: true });
@@ -55,10 +59,27 @@ function detectarChromiumPath() {
 const chromiumPath = detectarChromiumPath();
 
 // Criação da única instância do cliente
+const dataDir = path.join(process.cwd(), 'data');
+if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+}
+
+const authPath = path.join(dataDir, '.wwebjs_auth');
+const cachePath = path.join(dataDir, '.wwebjs_cache');
+console.log(`📂 Caminho de autenticação: ${authPath}`);
+console.log(`📂 Caminho de cache: ${cachePath}`);
+
+// Importa LocalWebCache para redirecionar cache do WhatsApp Web
+const LocalWebCache = require('whatsapp-web.js/src/webCache/LocalWebCache');
+
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: "bot-whatsapp",
-        dataPath: path.join(process.cwd(), '.wwebjs_auth'),
+        dataPath: authPath,
+    }),
+    webVersionCache: new LocalWebCache({
+        path: cachePath,
+        strict: false
     }),
     puppeteer: {
         headless: true,
@@ -93,59 +114,61 @@ client.on('qr', qr => {
 });
 
 client.on('authenticated', () => {
-    console.log('\n✅ WhatsApp autenticado!');
+    if (!botPronto) {
+        console.log('\n✅ WhatsApp autenticado!');
+    }
     qrGerado = false;
     tentativasReconexao = 0;
 });
 
 client.on('ready', () => {
+    if (botPronto) {
+        console.log('✅ Bot reconectado com sucesso!');
+        return; // Evita re-inicializar jobs
+    }
+    botPronto = true;
     console.log('\n✅ Bot iniciado com sucesso!');
-    tentativasReconexao = 0; // Reset contador de tentativas
+    tentativasReconexao = 0;
+    tentativasReconexao = 0;
     iniciarVerificacaoLembretes(client);
     iniciarJobPascom(client);
+    iniciarScheduler(client);
+
+    // Inicializa RAG (Eager Loading) para evitar delay na primeira mensagem
+    const ragService = require('../rag/rag-service');
+    ragService.initialize().catch(e => console.error('❌ Falha ao iniciar RAG:', e));
 });
 
 client.on('auth_failure', msg => {
     console.error('\n❌ Falha na autenticação:', msg);
+    inicializando = false; // libera guard para permitir retry
     tentativasReconexao++;
 
     if (tentativasReconexao <= maxTentativasReconexao) {
-        console.log(`🔄 Tentativa de reconexão ${tentativasReconexao}/${maxTentativasReconexao}...`);
-        setTimeout(() => {
-            limparCacheAuth();
-            client.initialize().catch(err => {
-                console.error('❌ Erro na reconexão:', err);
-            });
-        }, 5000); // Aguarda 5 segundos antes de tentar novamente
+        console.log(`🔄 Tentativa de reconexão ${tentativasReconexao}/${maxTentativasReconexao} (preservando sessão)...`);
+        setTimeout(() => inicializarCliente(), 5000);
     } else {
-        console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
+        console.error('❌ Máximo de tentativas atingido. Limpando sessão e reiniciando...');
         tentativasReconexao = 0;
         setTimeout(() => {
             try { limparCacheAuth(); } catch { }
-            client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
+            inicializarCliente();
         }, 10000);
     }
 });
 
 client.on('disconnected', reason => {
     console.log('\n⚠️ WhatsApp desconectado:', reason);
+    inicializando = false; // libera guard para permitir reconexão
     tentativasReconexao++;
 
     if (tentativasReconexao <= maxTentativasReconexao) {
-        console.log(`🔄 Tentativa de reconexão ${tentativasReconexao}/${maxTentativasReconexao}...`);
-        setTimeout(() => {
-            limparCacheAuth(); // Limpa cache antes de reconectar
-            client.initialize().catch(err => {
-                console.error('❌ Erro na reconexão:', err);
-            });
-        }, 3000); // Aguarda 3 segundos antes de tentar novamente
+        console.log(`🔄 Reconectando ${tentativasReconexao}/${maxTentativasReconexao} (sessão preservada)...`);
+        setTimeout(() => inicializarCliente(), 3000);
     } else {
-        console.error('❌ Máximo de tentativas de reconexão atingido. Mantendo processo vivo e tentando novamente em 10s...');
+        console.error('❌ Máximo de tentativas de reconexão atingido. Nova tentativa em 10s...');
         tentativasReconexao = 0;
-        setTimeout(() => {
-            try { limparCacheAuth(); } catch { }
-            client.initialize().catch(err => console.error('❌ Erro ao tentar reinicializar (loop):', err));
-        }, 10000);
+        setTimeout(() => inicializarCliente(), 10000);
     }
 });
 
@@ -164,65 +187,53 @@ client.on('error', (err) => {
 });
 
 // Evento de mensagem principal
-client.on('message', (msg) => handleMessage(msg, client));
+// Evento de mensagem (apenas recebidas)
+client.on('message', async (msg) => {
+    // Ignora status updates
+    if (msg.from === 'status@broadcast') return;
 
-// Função para inicializar com tratamento de erro melhorado
-async function inicializarCliente() {
+    // Ignora mensagens de canais/newsletters do WhatsApp
+    if (msg.from?.endsWith('@newsletter')) return;
+
+    console.log(`\n📩 Mensagem recebida! De: ${msg.from} | Tipo: ${msg.type} | Corpo: ${msg.body.substring(0, 50)}...`);
+    await handleMessage(msg, client);
+});
+
+// Função para inicializar com retry sequencial (sem chamadas concorrentes)
+async function inicializarCliente(tentativa = 1, maxTentativas = 3) {
+    if (inicializando) {
+        console.log('⚠️ Inicialização já em andamento, ignorando chamada duplicada.');
+        return;
+    }
+
+    inicializando = true;
+
     try {
-        console.log('🚀 Iniciando cliente WhatsApp...');
+        console.log(`🚀 Iniciando cliente WhatsApp... (tentativa ${tentativa}/${maxTentativas})`);
         await client.initialize();
+        console.log('✅ client.initialize() concluído.');
     } catch (err) {
-        console.error('❌ Falha ao inicializar o cliente WhatsApp:', err);
+        console.error(`❌ Falha ao inicializar (tentativa ${tentativa}):`, err?.message || err);
 
-        // Se for erro de contexto destruído ou protocolo, limpa cache e tenta novamente
-        if (err.message.includes('Execution context was destroyed') ||
-            err.message.includes('Protocol error') ||
-            err.message.includes('auth') ||
-            err.message.includes('session') ||
-            err.message.includes('Target closed')) {
+        inicializando = false; // libera o guard para retry
 
-            console.log('🧹 Limpando cache devido a erro de contexto/protocolo...');
-            limparCacheAuth();
-
-            // Aguarda um pouco e tenta novamente
-            setTimeout(async () => {
-                try {
-                    console.log('🔄 Tentando reinicializar após limpeza de cache...');
-                    await client.initialize();
-                } catch (retryErr) {
-                    console.error('❌ Falha na segunda tentativa:', retryErr);
-                    console.log('🔄 Tentando uma última vez com configuração alternativa...');
-
-                    // Última tentativa com configuração mais simples
-                    setTimeout(async () => {
-                        try {
-                            limparCacheAuth();
-                            await client.initialize();
-                        } catch (finalErr) {
-                            console.error('❌ Falha final:', finalErr);
-                            console.log('⏳ Mantendo processo vivo. Nova tentativa em 15s...');
-                            setTimeout(async () => {
-                                try {
-                                    limparCacheAuth();
-                                    await client.initialize();
-                                } catch (lastErr) {
-                                    console.error('❌ Nova tentativa também falhou:', lastErr);
-                                }
-                            }, 15000);
-                        }
-                    }, 3000);
-                }
-            }, 3000);
+        if (tentativa < maxTentativas) {
+            const delay = tentativa * 5000; // 5s, 10s, 15s
+            console.log(`🔄 Nova tentativa em ${delay / 1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+            return inicializarCliente(tentativa + 1, maxTentativas);
         } else {
-            console.error('❌ Erro não relacionado a contexto/protocolo:', err.message);
-            console.log('⏳ Mantendo processo vivo. Nova tentativa em 15s...');
-            setTimeout(async () => {
-                try {
-                    await client.initialize();
-                } catch (lastErr) {
-                    console.error('❌ Nova tentativa também falhou:', lastErr);
-                }
-            }, 15000);
+            console.error('❌ Todas as tentativas falharam. Limpando sessão e tentando última vez...');
+            limparCacheAuth();
+            await new Promise(resolve => setTimeout(resolve, 5000));
+
+            inicializando = true;
+            try {
+                await client.initialize();
+            } catch (finalErr) {
+                console.error('❌ Falha final após limpar sessão:', finalErr?.message || finalErr);
+                inicializando = false;
+            }
         }
     }
 }
@@ -230,4 +241,4 @@ async function inicializarCliente() {
 // Inicialização do cliente
 inicializarCliente();
 
-module.exports = { client }; // Exporta o cliente se necessário em outros lugares
+module.exports = { client };

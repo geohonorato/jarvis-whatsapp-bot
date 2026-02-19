@@ -1,87 +1,53 @@
+/**
+ * Message Handler — orquestrador principal de mensagens
+ * 
+ * Responsável apenas por:
+ * 1. Verificar grupo/menção
+ * 2. Rotear para handlers especializados
+ * 3. Coordenar o fluxo híbrido (Gemini → Groq)
+ * 
+ * Cada domínio (calendário, finanças, imagem, etc.) tem seu próprio handler em ./handlers/
+ */
+
 const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat-history');
 const {
     processarMensagemMultimodal: processarComGroqPrincipal,
     filtrarPensamentos,
     processarComGroq
 } = require('../api/groq');
-const {
-    processarMensagemMultimodal: processarComGemini,
-    analisarConteudoMultimodal
-} = require('../api/gemini');
-const { responderMagisteriumComFormatacao } = require('../magisterium');
-const { processarComandoImagem } = require('../api/image-generator');
-const { resumirVideoYoutube } = require('../api/youtube');
-const { setPascomGroupId } = require('../jobs/pascom-notification');
+const { analisarConteudoMultimodal } = require('../api/gemini');
 
-const {
-    registrarDespesa,
-    registrarReceita,
-    obterResumoFinanceiro,
-    obterUltimasTransacoes,
-    definirOrcamento,
-    obterComparacao,
-    exportarDados
-} = require('../finance-api');
-
-// Cache temporário para última imagem gerada (por chat)
-const ultimaImagemCache = {};
-const {
-    getGoogleAuth,
-    listarEventos,
-    listarEventosAmanha,
-    listarEventosSemana,
-    listarEventosProximaSemana,
-    listarEventosMes,
-    listarEventosProximoMes,
-    listarEventosData,
-    listarProximosEventos,
-    adicionarEvento,
-    removerEvento,
-    formatarEventos,
-    CALENDAR_ID,
-    PASCOM_CALENDAR_ID
-} = require('../api/calendar');
-const { MessageMedia } = require("whatsapp-web.js");
-const fs = require('fs');
-
-// Objeto para gerenciar o estado da conversa
-const conversationState = {};
+// Handlers especializados
+const { handleMediaMessage } = require('./handlers/media-handler');
+const { handleYoutubeCommand } = require('./handlers/youtube-handler');
+const { isDocumentResendRequest, hasCachedImage, handleDocumentResend, handleImageCommand } = require('./handlers/image-handler');
+const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
+const { isFinanceCommand, handleFinanceCommand } = require('./handlers/finance-handler');
+const { isCalendarCommand, hasPendingDeleteSelection, handleDeleteSelection, handleSetupPascom, handleCalendarCommand } = require('./handlers/calendar-handler');
+const { isACCommand, handleACCommand } = require('./handlers/ac-handler');
 
 async function handleMessage(msg, client) {
     try {
         const chatId = msg.from;
         const lowerCaseBody = msg.body?.toLowerCase() || '';
-        const hasText = !!msg.body; // Verifica se há texto na mensagem
-
-        // --- INICIA LEMBRETES AUTOMATICAMENTE ---
-
-
-
-
-
-
-
+        const hasText = !!msg.body;
 
         // --- VERIFICAÇÃO DE GRUPO E MENÇÃO ---
         const isGroup = chatId.endsWith('@g.us');
-        let shouldProcess = true;
 
         if (isGroup) {
             let isMentioned = false;
             const botId = client.info.wid._serialized;
 
             try {
-                // Tenta método nativo
                 const mentions = await msg.getMentions();
                 isMentioned = mentions.some(contact => contact.id._serialized === botId);
             } catch (err) {
-                // Fallback: verificação manual no corpo da mensagem se a função falhar (erro comum WWebJS)
                 console.warn('⚠️ Falha ao obter menções (bug WWebJS), usando fallback regex:', err.message);
 
                 const userPart = botId.split('@')[0];
                 const regexMention = new RegExp(`@${userPart}`, 'i');
                 const regexName = /@(jarvis|bot|assistente|calendar|passcom)/i;
-                // Explicito para 559181703506 e LID observada nos logs
                 const regexPhoneVar = /@(55)?(91)?(9)?81703506|@33879406706925/i;
 
                 const matchNumber = regexMention.test(msg.body);
@@ -98,14 +64,10 @@ async function handleMessage(msg, client) {
                 console.log(`   - Resultado Final: ${isMentioned}`);
             }
 
-            // Opcional: Verifica se está respondendo a uma mensagem do bot
             const quotedMsg = msg.hasQuotedMsg ? await msg.getQuotedMessage() : null;
             const isQuotingBot = quotedMsg && quotedMsg.fromMe;
 
             if (!isMentioned && !isQuotingBot) {
-                // Se for grupo e não foi mencionado nem citado, ignora silenciosamente
-                shouldProcess = false;
-                // console.log(`🔇 Mensagem de grupo (${chatId}) ignorada (sem menção).`);
                 return;
             } else {
                 console.log(`🔔 Mensagem de grupo (${chatId}) ACEITA (Menção: ${isMentioned}, Resposta: ${isQuotingBot})`);
@@ -113,126 +75,30 @@ async function handleMessage(msg, client) {
         }
 
         // --- Lógica de Estado para Remoção de Evento ---
-        if (conversationState[chatId] && conversationState[chatId].action === 'awaiting_delete_selection') {
-            const selection = parseInt(lowerCaseBody, 10);
-            const events = conversationState[chatId].events;
-
-            if (!isNaN(selection) && selection > 0 && selection <= events.length) {
-                const eventToDelete = events[selection - 1];
-                try {
-                    const auth = await getGoogleAuth();
-                    await removerEvento(auth, eventToDelete.id);
-                    await client.sendMessage(chatId, `✅ Evento "${eventToDelete.summary}" removido com sucesso!`);
-                } catch (error) {
-                    console.error('❌ Erro ao tentar remover evento por seleção:', error);
-                    await client.sendMessage(chatId, '❌ Ocorreu um erro ao tentar remover o evento.');
-                }
-            } else {
-                await client.sendMessage(chatId, '❌ Seleção inválida. Por favor, responda com o número do evento que deseja remover.');
-            }
-            // Limpa o estado da conversa após a ação
-            delete conversationState[chatId];
-            return; // Finaliza o processamento aqui
+        if (hasPendingDeleteSelection(chatId)) {
+            await handleDeleteSelection(client, chatId, lowerCaseBody);
+            return;
         }
 
         // --- Processamento de Mídia ---
         if (msg.hasMedia) {
-            if (msg.type === 'image') {
-                console.log('\n📸 Imagem recebida...');
-                try {
-                    const media = await msg.downloadMedia();
-                    if (!media || !media.data) {
-                        await client.sendMessage(chatId, '❌ Erro ao baixar imagem.');
-                        return;
-                    }
-
-                    const legenda = msg.body || ''; // Pega a legenda/caption
-                    console.log(`🖼️ Imagem ${media.mimetype} recebida.` + (legenda ? ` Com legenda: "${legenda}"` : ' Sem legenda.'))
-
-                    // Prepara as partes para envio multimodal
-                    const partsEntrada = [];
-                    if (legenda) {
-                        partsEntrada.push({ text: legenda }); // Adiciona o texto da legenda primeiro
-                    } else {
-                        // Se não houver legenda, envia um prompt padrão pedindo análise? Ou não envia nada?
-                        // Vamos enviar um prompt padrão se não houver legenda.
-                        partsEntrada.push({ text: "Analise esta imagem em detalhes." });
-                    }
-                    partsEntrada.push({ inlineData: { data: media.data, mimeType: media.mimetype } }); // Adiciona a imagem
-
-                    // Adiciona ao histórico ANTES de enviar para a IA
-                    adicionarAoHistorico(chatId, 'user', partsEntrada);
-
-                    // Chama a função de processamento multimodal com GEMINI (suporta imagens)
-                    await processarMensagemTexto(client, partsEntrada, chatId, true);
-
-                } catch (error) {
-                    console.error('\n❌ Erro ao processar imagem:', error);
-                    adicionarAoHistorico(chatId, 'user', [{ text: "[Erro ao processar imagem enviada]" }]);
-                    await client.sendMessage(chatId, '❌ Erro inesperado ao processar imagem.');
-                }
-                return; // Importante para não processar como texto depois
-            }
-            else if (msg.type === 'audio' || msg.type === 'ptt') {
-                console.log('\n🎤 Áudio recebido - processando com sistema híbrido...');
-                try {
-                    const media = await msg.downloadMedia();
-                    if (!media || !media.data) {
-                        await client.sendMessage(chatId, '❌ Erro ao baixar áudio.');
-                        return;
-                    }
-
-                    console.log(`🎵 Áudio ${media.mimetype} recebido`);
-
-                    // Prepara as partes para envio multimodal
-                    const partsEntrada = [
-                        { text: "Transcreva este áudio em português do Brasil." },
-                        { inlineData: { data: media.data, mimeType: media.mimetype } }
-                    ];
-
-                    // Adiciona ao histórico ANTES de enviar para a IA
-                    adicionarAoHistorico(chatId, 'user', partsEntrada);
-
-                    // Chama a função de processamento multimodal (sistema híbrido)
-                    await processarMensagemTexto(client, partsEntrada, chatId, true);
-
-                } catch (error) {
-                    console.error('\n❌ Erro ao processar áudio:', error);
-                    adicionarAoHistorico(chatId, 'user', [{ text: "[Erro ao processar áudio enviado]" }]);
-                    await client.sendMessage(chatId, '❌ Erro inesperado ao processar áudio.');
-                }
-                return;
-            }
-            else {
-                console.log(`\n⚠️ Mídia do tipo ${msg.type} recebida, mas não processada.`);
-                // Pode adicionar um marcador ao histórico se quiser
-                adicionarAoHistorico(chatId, 'user', [{ text: `[Mídia não suportada recebida: ${msg.type}]` }]);
-                // Enviar uma mensagem para o usuário?
-                // await client.sendMessage(chatId, `Desculpe, ainda não consigo processar arquivos do tipo ${msg.type}.`);
-                return; // Importante
-            }
+            await handleMediaMessage(client, msg, chatId, processarMensagemTexto);
+            return;
         }
-        // --- Processamento apenas de Texto ---
-        else if (hasText) {
+
+        // --- Processamento de Texto ---
+        if (hasText) {
             console.log('\n📩 Mensagem de texto recebida:', msg.body);
-            // Prepara 'parts' apenas com texto
             const partsEntrada = [{ text: msg.body }];
-
-            // Adiciona ao histórico ANTES de enviar
             adicionarAoHistorico(chatId, 'user', partsEntrada);
-
-            // Chama a função de processamento (que agora é multimodal)
             await processarMensagemTexto(client, partsEntrada, chatId);
-
         } else {
             console.log("❓ Mensagem recebida sem texto ou mídia suportada.");
-            // Não faz nada ou envia uma mensagem de ajuda?
         }
 
     } catch (error) {
         console.error('\n❌ Erro não tratado no evento de mensagem:', error);
         try {
-            // Tenta adicionar erro ao histórico
             adicionarAoHistorico(msg.from || 'unknown', 'model', [{ text: `❌ Erro GERAL: ${error.message}` }]);
             await client.sendMessage(msg.from, '❌ Ops! Ocorreu um erro inesperado. Tente novamente mais tarde.');
         } catch (sendError) {
@@ -249,27 +115,19 @@ async function processarAudioRecebido(client, msg, chatId) {
 async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini = false) {
     try {
         const historico = obterHistorico(chatId);
-
-        // Extrai o texto principal da entrada para verificações de comando (se houver)
         const textoUsuario = partsEntrada.find(p => p.text)?.text || '';
         const lowerCaseBody = textoUsuario.toLowerCase();
-
-        // Verifica se há conteúdo multimodal (imagem, áudio, etc)
         const temConteudoMultimodal = partsEntrada.some(p => p.inlineData);
+        const isGroup = chatId.endsWith('@g.us');
 
-        // SISTEMA HÍBRIDO INTELIGENTE:
-        // 1. Se tiver mídia (imagem/áudio/doc) → Gemini analisa/transcreve primeiro
-        // 2. Depois envia resultado para Groq tomar decisão
-        // 3. Se for apenas texto → Groq direto
-
+        // --- SISTEMA HÍBRIDO ---
         let partsParaProcessar = partsEntrada;
 
         if (temConteudoMultimodal) {
-            console.log('\n� === SISTEMA HÍBRIDO ATIVADO ===');
-            console.log('�🖼️ Conteúdo multimodal detectado');
+            console.log('\n🔀 === SISTEMA HÍBRIDO ATIVADO ===');
+            console.log('🖼️ Conteúdo multimodal detectado');
             console.log('📋 Fase 1/2: Gemini analisa/transcreve o conteúdo...');
 
-            // Gemini APENAS analisa/transcreve (não toma decisões)
             const analiseGemini = await analisarConteudoMultimodal(partsEntrada);
 
             if (analiseGemini.startsWith('❌')) {
@@ -280,677 +138,388 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
             console.log('✅ Análise/transcrição concluída');
             console.log('📋 Fase 2/2: Groq processa e decide ação...');
 
-            // Prepara o contexto para o Groq com a análise do Gemini
             const contextoUsuario = textoUsuario ? `\nCONTEXTO DO USUÁRIO: "${textoUsuario}"\n\n` : '\n';
             partsParaProcessar = [{
                 text: `${contextoUsuario}[CONTEÚDO ANALISADO/TRANSCRITO]:\n${analiseGemini}\n\nCom base nas informações acima, decida qual ação tomar (conversar, criar evento, gerar imagem, consultar magistério, etc).`
             }];
-
         } else {
-            console.log('📝 Apenas texto - processamento direto com Groq (GPT OSS 120b)');
+            console.log('📝 Apenas texto - processamento direto com Groq');
         }
 
-        // Verifica se é um pedido de reenvio da última imagem como documento
-        const pedidoDocumento = /^(envie?|mande?|envia|manda|enviar|mandar)\s+(como|em)\s+documento$/i.test(textoUsuario.trim());
-        if (pedidoDocumento && ultimaImagemCache[chatId]) {
-            console.log('\n📄 Detectado pedido de reenvio como documento...');
-
-            const ultimaImagem = ultimaImagemCache[chatId];
-
-            // Verifica se a imagem ainda existe
-            if (fs.existsSync(ultimaImagem.imagePath)) {
-                const mediaGerada = MessageMedia.fromFilePath(ultimaImagem.imagePath);
-
-                console.log("📄 Reenviando última imagem como documento...");
-                await client.sendMessage(chatId, mediaGerada, {
-                    sendMediaAsDocument: true,
-                    caption: '📄 Imagem enviada como documento (qualidade original preservada)'
-                });
-
-                adicionarAoHistorico(chatId, 'user', partsEntrada);
-                adicionarAoHistorico(chatId, 'model', [{ text: '[Imagem Reenviada como Documento]' }]);
-
-                return; // Finaliza aqui
-            } else {
-                await client.sendMessage(chatId, '❌ Desculpe, a última imagem já foi removida. Por favor, gere uma nova imagem.');
-                return;
-            }
-        }
-
-        // Removida verificação manual shouldUseMagisterium - agora o Gemini identifica
-
-        // --- Verificação de Comandos Específicos (Ex: /resumir, /limpar) ---
-        if (textoUsuario.toLowerCase().startsWith('/resumir ')) {
-            const urlVideo = textoUsuario.substring(9).trim();
-            // Validação básica da URL (pode ser melhorada)
-            if (urlVideo.includes('youtube.com/') || urlVideo.includes('youtu.be/')) {
-                console.log(`\n▶️ Comando /resumir detectado para URL: ${urlVideo}`);
-                await client.sendMessage(chatId, `⏳ Entendido! Buscando a transcrição e resumindo o vídeo:\n${urlVideo}\n\nIsso pode levar um momento...`);
-                // Adiciona o comando de resumo ao histórico
-                adicionarAoHistorico(chatId, 'user', partsEntrada);
-
-                const resumo = await resumirVideoYoutube(urlVideo);
-
-                await client.sendMessage(chatId, resumo);
-                // Adiciona resposta do resumo ao histórico
-                adicionarAoHistorico(chatId, 'model', [{ text: resumo }]);
-                return;
-            } else {
-                await client.sendMessage(chatId, '❌ URL do YouTube inválida. Use o formato: /resumir https://www.youtube.com/watch?v=...');
-                // Adiciona ao histórico
-                adicionarAoHistorico(chatId, 'user', partsEntrada);
-                adicionarAoHistorico(chatId, 'model', [{ text: '❌ URL inválida fornecida.' }]); // Correção: Adiciona a resposta do modelo
-                return;
-            }
-        }
-
-        if (textoUsuario.toLowerCase() === '/limpar') {
-            limparHistorico(chatId); // Limpa histórico específico do chat (ou global se preferir)
-            await client.sendMessage(chatId, '🧹 Histórico da conversa limpo!');
-            // Não adiciona '/limpar' ao histórico
+        // --- Pedido de reenvio como documento ---
+        if (isDocumentResendRequest(textoUsuario) && hasCachedImage(chatId)) {
+            await handleDocumentResend(client, chatId, partsEntrada);
             return;
         }
-        // --- Fim Verificação Comandos ---
 
-        // Adiciona mensagem do usuário ao histórico (se não for comando interno ou resumo)
-        // Verifica também se não é uma legenda de imagem já adicionada na seção de imagem
+        // --- Comandos diretos do usuário ---
+        if (lowerCaseBody.startsWith('/resumir ')) {
+            await handleYoutubeCommand(client, chatId, textoUsuario, partsEntrada);
+            return;
+        }
+
+        if (lowerCaseBody === '/limpar') {
+            limparHistorico(chatId);
+            await client.sendMessage(chatId, '🧹 Histórico da conversa limpo!');
+            return;
+        }
+
+        // --- Code Interpreter: Execução de Python ---
+        if (lowerCaseBody.startsWith('/python ') || lowerCaseBody.startsWith('/py ')) {
+            const { executePythonCode } = require('../interpreter/python-executor');
+            const code = textoUsuario.replace(/^\/python\s+|^\/py\s+/i, '');
+
+            await client.sendMessage(chatId, '🐍 Executando script...');
+
+            try {
+                const output = await executePythonCode(code);
+                await client.sendMessage(chatId, `🖥️ *Saída:* \n\`\`\`\n${output}\n\`\`\``);
+            } catch (error) {
+                await client.sendMessage(chatId, `❌ Erro interno: ${error.message}`);
+            }
+            return;
+        }
+
+        // --- Conversor de Mídia (FFmpeg) ---
+        if (lowerCaseBody === '/tomp3') {
+            if (!msg.hasQuotedMsg) {
+                await client.sendMessage(chatId, '❌ Responda a um vídeo ou áudio com /tomp3');
+                return;
+            }
+
+            const quotedMsg = await msg.getQuotedMessage();
+            if (!quotedMsg.hasMedia) {
+                await client.sendMessage(chatId, '❌ A mensagem respondida não tem mídia.');
+                return;
+            }
+
+            await client.sendMessage(chatId, '⏳ Baixando e convertendo mídia...');
+
+            try {
+                const media = await quotedMsg.downloadMedia();
+                if (!media) throw new Error('Falha no download da mídia.');
+
+                // Salva temporariamente
+                const { convertToMp3 } = require('../media/converter');
+                const fs = require('fs');
+                const path = require('path');
+                const tempInput = path.join(__dirname, `../../temp/media/input_${Date.now()}.${media.mimetype.split('/')[1].split(';')[0]}`);
+
+                // Decodifica Base64 e salva
+                fs.writeFileSync(tempInput, media.data, 'base64');
+
+                // Converte
+                const mp3Path = await convertToMp3(tempInput);
+
+                // Envia áudio
+                const { MessageMedia } = require('whatsapp-web.js');
+                const mp3Media = MessageMedia.fromFilePath(mp3Path);
+                await client.sendMessage(chatId, mp3Media, { sendAudioAsVoice: true });
+
+                // Limpa arquivos
+                fs.unlinkSync(tempInput);
+                fs.unlinkSync(mp3Path);
+
+            } catch (error) {
+                console.error('Erro /tomp3:', error);
+                await client.sendMessage(chatId, `❌ Erro na conversão: ${error.message}`);
+            }
+            return;
+        }
+
+        // --- RAG: Memória de Longo Prazo ---
+        if (isACCommand(lowerCaseBody)) {
+            const res = await handleACCommand(client, chatId, textoUsuario);
+            await client.sendMessage(chatId, res);
+            return;
+        }
+
+        // --- RAG: Memória de Longo Prazo ---
+        const ragService = require('../rag/rag-service');
+
+        // Comando /memorizar
+        if (lowerCaseBody.startsWith('/memorizar ')) {
+            const memoria = textoUsuario.substring(11).trim();
+            if (memoria) {
+                await ragService.adicionarMemoria(memoria, {
+                    source: 'user_command',
+                    chatId: chatId,
+                    date: new Date().toISOString()
+                });
+                await client.sendMessage(chatId, '🧠 Memória salva com sucesso!');
+            } else {
+                await client.sendMessage(chatId, '❌ Use: /memorizar <texto>');
+            }
+            return;
+        }
+
+        // --- Adiciona ao histórico (se não foi comando ou mídia) ---
         const jaAdicionadoComoLegenda = partsEntrada.length > 1 && partsEntrada.some(p => p.inlineData);
         if (!textoUsuario.startsWith('/') && !jaAdicionadoComoLegenda) {
             adicionarAoHistorico(chatId, 'user', partsEntrada);
         }
 
-
-        // Otimização para o fluxo de remoção: não envia o histórico completo
+        // Otimização: não envia histórico no fluxo de delete
         const ehFluxoDelete = historico.some(h => h.parts.some(p => p.text?.includes('/delete')));
         const historicoParaEnviar = ehFluxoDelete ? null : historico;
 
-        // SEMPRE usa Groq para decisão final (mais rápido e melhor para raciocínio)
-        console.log('🧠 Groq (GPT OSS 120b) processando e decidindo ação...');
-        const respostaIA = await processarComGroqPrincipal(partsParaProcessar, historicoParaEnviar);
+        // --- GROQ: Decisão final ---
+        // --- GROQ: Decisão final ---
+        console.time('🕒 Tempo Total Groq');
+        console.time('🔍 Tempo RAG');
+
+        // RAG: Busca inteligente com query expansion para queries curtas
+        // Estratégia: busca DUPLA — query original + query expandida com contexto do histórico
+        let contextoRAG = [];
+
+        // 1. Busca direta (sempre)
+        const resultsDirect = await ragService.buscarContexto(textoUsuario);
+
+        // 2. Busca expandida (só para queries curtas, com contexto de msgs anteriores do USER)
+        if (textoUsuario.length < 40 && historico.length > 0) {
+            const lastUserMsgs = historico
+                .filter(h => h.role === 'user')
+                .slice(-2)
+                .map(h => h.parts.map(p => p.text || '').join(' '))
+                .filter(t => t.length > 0);
+
+            if (lastUserMsgs.length > 0) {
+                const expandedQuery = `${lastUserMsgs.join('. ')}. ${textoUsuario}`;
+                console.log(`🔎 Query expandida: "${textoUsuario}" → "${expandedQuery.substring(0, 80)}..."`);
+                const resultsExpanded = await ragService.buscarContexto(expandedQuery);
+
+                // Merge: adiciona resultados expandidos que não estão nos diretos
+                const directTexts = new Set(resultsDirect.map(d => d.text));
+                for (const r of resultsExpanded) {
+                    if (!directTexts.has(r.text)) {
+                        resultsDirect.push(r);
+                    }
+                }
+            }
+        }
+
+        contextoRAG = resultsDirect;
+        console.timeEnd('🔍 Tempo RAG');
+
+        let textoComContexto = partsParaProcessar;
+
+        if (contextoRAG.length > 0) {
+            const contextoString = contextoRAG.map(doc => `- ${doc.text}`).join('\n');
+            // console.log(`🧠 Contexto recuperado...`); // Reduzindo flood de log
+
+            const textoOriginal = partsParaProcessar[0].text;
+            textoComContexto = [{
+                text: `${textoOriginal}\n\n[MEMÓRIA DE LONGO PRAZO RELEVANTE]:\n${contextoString}`
+            }];
+        }
+
+        console.time('🤖 Tempo API Groq');
+        const respostaIA = await processarComGroqPrincipal(textoComContexto, historicoParaEnviar);
+        console.timeEnd('🤖 Tempo API Groq');
+        console.timeEnd('🕒 Tempo Total Groq');
 
         if (respostaIA && !respostaIA.startsWith('❌')) {
-            const partsResposta = [{ text: respostaIA }]; // Prepara resposta para histórico
+            let respostaFinal = respostaIA;
 
-            // Verifica se a resposta é um comando do Magisterium AI
-            if (respostaIA.startsWith('/magisterium')) {
-                console.log('\n⛪ Detectado comando /magisterium, redirecionando para especialista...');
+            // --- MEMORY EXTRACTOR (Background, fire-and-forget) ---
+            // Extrai fatos automaticamente via IA separada, sem tags visíveis
+            const textoOriginalUsuario = partsParaProcessar[0]?.text || '';
+            ragService.extrairEMemorizar(textoOriginalUsuario, respostaIA, chatId)
+                .catch(err => console.error('⚠️ Memory extractor error:', err.message));
 
-                // Extrai a pergunta reformulada após /magisterium
-                const perguntaReformulada = respostaIA.substring(12).trim(); // Remove '/magisterium '
+            // --- TOOL USE: Processa ferramentas solicitadas pela IA ---
 
-                // Envia mensagem de feedback imediato
-                await client.sendMessage(chatId, '⛪ Aguarde, consultando o Magistério da Igreja...');
+            // 1. Python Code Interpreter
+            // Regex: <PYTHON>code</PYTHON>
+            const pythonRegex = /<PYTHON>([\s\S]*?)<\/PYTHON>/i;
+            const pythonMatch = respostaIA.match(pythonRegex);
+            if (pythonMatch) {
+                const code = pythonMatch[1];
+                respostaFinal = respostaFinal.replace(pythonRegex, '').trim();
 
-                // Adiciona ao histórico que foi identificada uma questão católica
-                adicionarAoHistorico(chatId, 'model', [{ text: '[Questão sobre doutrina católica identificada]' }]);
+                await client.sendMessage(chatId, '🐍 *Executando código Python...*');
+                try {
+                    const { executePythonCode } = require('../interpreter/python-executor');
+                    const result = await executePythonCode(code);
 
-                // Cria parts com a pergunta reformulada
-                const partsMagisterium = [{ text: perguntaReformulada }];
+                    // Envia output de texto (se não for só a mensagem de "gráfico salvo")
+                    const textOutput = result.text.replace(/\[CHART_SAVED\].*$/gm, '').trim();
+                    if (textOutput && textOutput !== '✅ Código executado com sucesso.') {
+                        await client.sendMessage(chatId, `🖥️ *Resultado:*\n\`\`\`\n${textOutput}\n\`\`\``);
+                    }
 
-                // Processa com Magisterium AI e formata com Gemini
-                const respostaMagisterium = await responderMagisteriumComFormatacao(partsMagisterium, historico);
+                    // Envia gráfico como documento HD se gerado
+                    if (result.imagePath) {
+                        const { MessageMedia } = require('whatsapp-web.js');
+                        const chartMedia = MessageMedia.fromFilePath(result.imagePath);
 
-                await client.sendMessage(chatId, respostaMagisterium);
-                adicionarAoHistorico(chatId, 'model', [{ text: respostaMagisterium }]);
+                        await client.sendMessage(chatId, chartMedia, {
+                            sendMediaAsHd: true,
+                            caption: '📊 Gráfico gerado pelo Python'
+                        });
+
+                        // Limpa arquivo temporário
+                        const fs = require('fs');
+                        try { fs.unlinkSync(result.imagePath); } catch (e) { }
+                    }
+                } catch (err) {
+                    await client.sendMessage(chatId, `❌ Erro na execução: ${err.message}`);
+                }
+            }
+
+            // 2. Crawler / Vigilante
+            // Regex: <VIGIAR url="..." preco="..." />
+            const vigiarRegex = /<VIGIAR\s+url="([^"]+)"\s+preco="([^"]+)"\s*\/?>/i;
+            const vigiarMatch = respostaIA.match(vigiarRegex);
+            if (vigiarMatch) {
+                const url = vigiarMatch[1];
+                const preco = parseFloat(vigiarMatch[2]);
+                respostaFinal = respostaFinal.replace(vigiarRegex, '').trim();
+
+                const { addWatch } = require('../../crawler/watch-manager');
+                addWatch(url, preco, chatId);
+                await client.sendMessage(chatId, `️🕵️‍♂️ *Vigilância Configurada!*\nURL: ${url}\nAlvo: R$ ${preco}`);
+            }
+
+            // 3. Conversor de Mídia
+            // Regex: <CONVERTER_MEDIA />
+            if (respostaIA.includes('<CONVERTER_MEDIA />') || respostaIA.includes('<CONVERTER_MEDIA/>')) {
+                respostaFinal = respostaFinal.replace(/<CONVERTER_MEDIA\s*\/?>/gi, '').trim();
+
+                // Verifica se tem mídia para converter (na própria mensagem ou citada)
+                let mediaMsg = msg;
+                if (msg.hasQuotedMsg) {
+                    mediaMsg = await msg.getQuotedMessage();
+                }
+
+                if (mediaMsg.hasMedia) {
+                    await client.sendMessage(chatId, '⏳ *Convertendo mídia para MP3...*');
+                    try {
+                        const media = await mediaMsg.downloadMedia();
+                        if (!media) throw new Error('Falha ao baixar mídia.');
+
+                        const fs = require('fs');
+                        const path = require('path');
+                        const { convertToMp3 } = require('../media/converter');
+
+                        // Salva input temporário
+                        const tempInput = path.join(__dirname, `../../temp/media/input_tool_${Date.now()}.${media.mimetype.split('/')[1].split(';')[0]}`);
+                        fs.writeFileSync(tempInput, media.data, 'base64');
+
+                        // Converte
+                        const mp3Path = await convertToMp3(tempInput);
+
+                        // Envia
+                        const { MessageMedia } = require('whatsapp-web.js');
+                        const mp3Media = MessageMedia.fromFilePath(mp3Path);
+                        await client.sendMessage(chatId, mp3Media, { sendAudioAsVoice: true });
+
+                        // Limpa
+                        fs.unlinkSync(tempInput);
+                        fs.unlinkSync(mp3Path);
+                    } catch (err) {
+                        await client.sendMessage(chatId, `❌ Erro na conversão: ${err.message}`);
+                    }
+                } else {
+                    await client.sendMessage(chatId, '⚠️ Não encontrei mídia para converter. Responda a um vídeo/áudio ou envie um.');
+                }
+            }
+
+            // 4. Baixador de Vídeo
+            // Regex: <BAIXAR_VIDEO url="..." /> - Suporta quebras de linha com [\s\S]
+            const baixarRegex = /<BAIXAR_VIDEO[\s\S]*?url="([^"]+)"[\s\S]*?\/?>/i;
+            const baixarMatch = respostaIA.match(baixarRegex);
+            if (baixarMatch) {
+                const url = baixarMatch[1];
+                respostaFinal = respostaFinal.replace(baixarRegex, '').trim();
+
+                await client.sendMessage(chatId, '⏳ *Baixando vídeo...* (Isso pode levar alguns instantes)');
+                try {
+                    const { downloadYouTubeVideo } = require('../media/downloader');
+                    const videoPath = await downloadYouTubeVideo(url);
+
+                    const fs = require('fs');
+                    const { MessageMedia } = require('whatsapp-web.js');
+                    const videoMedia = MessageMedia.fromFilePath(videoPath);
+
+                    // Envia como documento se for muito pesado, ou vídeo normal
+                    // Por padrão, enviamos como vídeo
+                    await client.sendMessage(chatId, videoMedia, { sendVideoAsGif: false, caption: '🎥 Vídeo baixado!' });
+
+                    // Limpa
+                    fs.unlinkSync(videoPath);
+                } catch (err) {
+                    await client.sendMessage(chatId, `❌ Erro no download: ${err.message}`);
+                }
+            }
+
+            const partsResposta = [{ text: respostaFinal }];
+
+            // Roteamento de comandos gerados pela IA
+            if (respostaIA.startsWith('/magisterium')) { // Use respostaIA here to check for the original command
+                await handleMagisteriumCommand(client, chatId, respostaIA, historico);
                 return;
             }
 
-            // Verifica se a resposta é um comando de imagem (gerado pela IA)
-            if (respostaIA.startsWith('/imagem')) {
-                console.log('\n🎨 Detectado comando /imagem, iniciando geração (Pollinations.AI)...');
+            if (respostaIA.startsWith('/imagem')) { // Use respostaIA here to check for the original command
+                await handleImageCommand(client, chatId, respostaIA, partsResposta);
+                return;
+            }
 
-                // Envia mensagem de feedback imediato
-                await client.sendMessage(chatId, '🎨 Aguarde, gerando sua imagem...');
+            // A partir daqui, adiciona resposta ao histórico
+            adicionarAoHistorico(chatId, 'model', partsResposta);
 
-                // Adiciona o comando /imagem original ao histórico do modelo
-                adicionarAoHistorico(chatId, 'model', partsResposta);
+            if (isFinanceCommand(respostaIA)) {
+                await handleFinanceCommand(client, chatId, respostaIA);
+                return;
+            }
 
-                // Processa o comando de imagem usando o serviço de imagens
-                const resultadoGeracao = await processarComandoImagem(respostaIA);
+            if (respostaIA.toLowerCase().trim() === '/setup pascom' || lowerCaseBody === '/setup pascom') {
+                await handleSetupPascom(client, chatId, isGroup);
+                return;
+            }
 
-                if (resultadoGeracao && resultadoGeracao.imageUrl) {
-                    // Se vier uma URL de imagem do Freepik, envia como link e preview
-                    const mensagemTexto = `${resultadoGeracao.text}\n${resultadoGeracao.imageUrl}`;
-                    try {
-                        await client.sendMessage(chatId, mensagemTexto);
-                        adicionarAoHistorico(chatId, 'model', [{ text: `[Geração de Imagem Freepik: ${mensagemTexto}]` }]);
-                    } catch (err) {
-                        console.error('Erro ao enviar imagem do Freepik:', err);
-                        await client.sendMessage(chatId, resultadoGeracao.text);
-                    }
-                } else if (resultadoGeracao && resultadoGeracao.text && !resultadoGeracao.imagePath) {
-                    const mensagemTexto = resultadoGeracao.text;
-                    console.log(`📝 Geração de imagem retornou texto: ${mensagemTexto}`);
-                    await client.sendMessage(chatId, mensagemTexto);
-                    adicionarAoHistorico(chatId, 'model', [{ text: `[Geração de Imagem: ${mensagemTexto}]` }]);
-                } else if (resultadoGeracao && resultadoGeracao.imagePath) {
-                    // Se houver texto antes da imagem, envia-o
-                    if (resultadoGeracao.text && !resultadoGeracao.text.startsWith('❌')) {
-                        console.log(`📝 Enviando texto pré-imagem: ${resultadoGeracao.text}`);
-                        await client.sendMessage(chatId, resultadoGeracao.text);
-                        adicionarAoHistorico(chatId, 'model', [{ text: resultadoGeracao.text }]);
-                    }
-
-                    // Envia a imagem gerada
-                    const mediaGerada = MessageMedia.fromFilePath(resultadoGeracao.imagePath);
-
-                    // Define opções de envio
-                    const sendOptions = {};
-                    let caption = '';
-
-                    if (resultadoGeracao.sendAsDocument) {
-                        // Usuário pediu EXPLICITAMENTE como documento
-                        console.log("� Enviando imagem como documento...");
-                        sendOptions.sendMediaAsDocument = true;
-                        caption = '📄 Imagem enviada como documento (qualidade original preservada)';
-                    } else {
-                        // Envia em HD (qualidade máxima do WhatsApp, não comprimido)
-                        console.log("📸 Enviando imagem em HD (qualidade máxima)...");
-                        sendOptions.sendMediaAsSticker = false; // Garante que não é sticker
-                        caption = '🖼️ Imagem gerada!\n\n💡 _Quer receber como documento para preservar 100% da qualidade? Peça: "envie como documento"_';
-                    }
-
-                    sendOptions.caption = caption;
-
-                    await client.sendMessage(chatId, mediaGerada, sendOptions);
-                    adicionarAoHistorico(chatId, 'model', [{ text: '[Imagem Gerada com Sucesso]' }]);
-
-                    // Salva no cache para possível reenvio como documento
-                    if (!resultadoGeracao.sendAsDocument) {
-                        ultimaImagemCache[chatId] = {
-                            imagePath: resultadoGeracao.imagePath,
-                            timestamp: Date.now()
-                        };
-
-                        // Remove do cache após 5 minutos
-                        setTimeout(() => {
-                            if (ultimaImagemCache[chatId]?.imagePath === resultadoGeracao.imagePath) {
-                                try {
-                                    if (fs.existsSync(resultadoGeracao.imagePath)) {
-                                        fs.unlinkSync(resultadoGeracao.imagePath);
-                                        console.log(`🗑️ Arquivo de imagem em cache removido: ${resultadoGeracao.imagePath}`);
-                                    }
-                                } catch (err) {
-                                    console.error(`⚠️ Erro ao remover cache: ${err.message}`);
-                                }
-                                delete ultimaImagemCache[chatId];
-                            }
-                        }, 5 * 60 * 1000); // 5 minutos
-                    } else {
-                        // Se enviou como documento, remove imediatamente
-                        try {
-                            fs.unlinkSync(resultadoGeracao.imagePath);
-                            console.log(`🗑️ Arquivo de imagem temporário removido: ${resultadoGeracao.imagePath}`);
-                        } catch (unlinkErr) {
-                            console.error(`⚠️ Falha ao remover arquivo de imagem temporário: ${resultadoGeracao.imagePath}`, unlinkErr);
-                        }
-                    }
-                } else {
-                    // Caso inesperado ou erro não tratado
-                    console.error('\n❌ Falha inesperada na geração da imagem. Resultado:', resultadoGeracao);
-                    await client.sendMessage(chatId, resultadoGeracao?.text || '❌ Falha desconhecida ao gerar imagem. Verifique os logs.');
-                    adicionarAoHistorico(chatId, 'model', [{ text: `[Falha na Geração da Imagem: ${resultadoGeracao?.text || 'Erro desconhecido'}]` }]);
-                }
-            } else {
-                // Se não for /imagem, continua processando normalmente
-                console.log('\n🤖 Processando resposta IA (Texto/Calendário):', respostaIA);
-
-                // Adiciona resposta da IA ao histórico (se não for /imagem)
-                adicionarAoHistorico(chatId, 'model', partsResposta);
-
-                // Verifica se a resposta é um comando para o calendário (usando a nova lista)
-                const comandosCalendario = ['/add', '/list', '/remove', '/evento', '/today', '/tomorrow', '/week', '/nextweek', '/month', '/nextmonth', '/date', '/delete', '/next'];
-                const ehComandoCalendario = comandosCalendario.some(cmd => respostaIA.startsWith(cmd));
-
-
-                if (respostaIA.toLowerCase().startsWith('/gasto') ||
-                    respostaIA.toLowerCase().startsWith('/receita') ||
-                    respostaIA.toLowerCase().startsWith('/financas') ||
-                    respostaIA.toLowerCase().startsWith('/transacoes') ||
-                    respostaIA.toLowerCase().startsWith('/orcamento') ||
-                    respostaIA.toLowerCase().startsWith('/comparativo')) {
-                    console.log('\n💰 Processando comando financeiro gerado pela IA:', respostaIA);
-
-                    try {
-                        const primeiraLinha = respostaIA.split('\n')[0].trim();
-                        const partes = primeiraLinha.split(' ');
-                        const comando = partes[0].toLowerCase();
-                        let respostaFinal = null;
-
-                        if (comando === '/gasto') {
-                            // /gasto VALOR CATEGORIA DESCRIÇÃO
-                            const valor = parseFloat(partes[1]);
-                            const categoria = partes[2] || 'Outros';
-                            const descricao = partes.slice(3).join(' ') || '';
-
-                            const resultado = registrarDespesa(chatId, valor, categoria, descricao);
-
-                            if (!resultado.erro) {
-                                const necessidadeInfo = resultado.necessidade
-                                    ? `${resultado.necessidade.emoji} ${resultado.necessidade.label} (score: ${resultado.necessidade.score}/100)`
-                                    : '';
-                                const evitavelInfo = resultado.gastoEvitavel > 0
-                                    ? `Gastos evitáveis no mês: R$${resultado.gastoEvitavel.toFixed(2)}`
-                                    : '';
-
-                                const partsGroq = [{
-                                    text: `Formatar resposta para usuário que registrou gasto de R$${valor} em ${categoria}. ${necessidadeInfo}. Total gasto no mês: R$${resultado.totalGastoMes}. Saldo: R$${resultado.saldoMes}. ${evitavelInfo}. ${resultado.orcamento ? `Orçamento: R$${resultado.orcamento.budget}, usado: ${resultado.orcamento.percentage}%` : ''}. Responda de forma objetiva em português. Máximo 3 linhas.`
-                                }];
-                                respostaFinal = await processarComGroq(partsGroq);
-                            } else {
-                                respostaFinal = resultado.mensagem;
-                            }
-                        }
-                        else if (comando === '/receita') {
-                            // /receita VALOR CATEGORIA DESCRIÇÃO
-                            const valor = parseFloat(partes[1]);
-                            const categoria = partes[2] || 'Receita';
-                            const descricao = partes.slice(3).join(' ') || '';
-
-                            const resultado = registrarReceita(chatId, valor, categoria, descricao);
-
-                            if (!resultado.erro) {
-                                const partsGroq = [{
-                                    text: `Formatar resposta para usuário que registrou receita de R$${valor}. Total de receitas no mês: R$${resultado.totalReceitaMes}. Saldo: R$${resultado.saldoMes}. Responda de forma positiva em português. Máximo 2 linhas.`
-                                }];
-                                respostaFinal = await processarComGroq(partsGroq);
-                            } else {
-                                respostaFinal = resultado.mensagem;
-                            }
-                        }
-                        else if (comando === '/financas') {
-                            // Resumo financeiro
-                            const resumo = obterResumoFinanceiro(chatId);
-
-                            if (!resumo.erro) {
-                                const analiseNecessidade = resumo.analiseNecessidade ?
-                                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): R$${resumo.gastoEvitavel} (${resumo.percentualEvitavel}% do total).`
-                                    : '';
-
-                                const partsGroq = [{
-                                    text: `Formatar resumo financeiro mensal de forma clara. Receitas: R$${resumo.receitas}, Despesas: R$${resumo.despesas}, Saldo: R$${resumo.saldo} (${resumo.status}). Top categorias: ${resumo.topCategorias.map(c => `${c.category} R$${c.amount}`).join(', ')}. Média diária: R$${resumo.mediaDiaria}. ${resumo.orcamento ? `Orçamento: ${resumo.orcamento.percentage}% usado` : ''}. ${analiseNecessidade} Responda em português com formatação clara e emojis. Máximo 8 linhas, destaque os gastos evitáveis.`
-                                }];
-                                respostaFinal = await processarComGroq(partsGroq);
-                            } else {
-                                respostaFinal = resumo.mensagem;
-                            }
-                        }
-                        else if (comando === '/transacoes') {
-                            // Últimas transações
-                            const transacoes = obterUltimasTransacoes(chatId, 5);
-
-                            if (!transacoes.erro && transacoes.quantidade > 0) {
-                                const lista = transacoes.transacoes.map((t, i) =>
-                                    `${i + 1}. ${t.tipo}: R$${t.valor} - ${t.categoria} (${t.data})`
-                                ).join('\n');
-
-                                respostaFinal = `📝 *Últimas ${transacoes.quantidade} transações:*\n\n${lista}`;
-                            } else {
-                                respostaFinal = '📝 Nenhuma transação registrada ainda.';
-                            }
-                        }
-                        else if (comando === '/orcamento') {
-                            // Definir orçamento
-                            const valor = parseFloat(partes[1]);
-                            const resultado = definirOrcamento(chatId, valor);
-
-                            if (!resultado.erro) {
-                                respostaFinal = `💰 Orçamento mensal definido em R$${valor}! Vou te avisar quando atingir 80% do limite.`;
-                            } else {
-                                respostaFinal = resultado.mensagem;
-                            }
-                        }
-                        else if (comando === '/comparativo') {
-                            // Comparação com mês anterior
-                            const comparacao = obterComparacao(chatId);
-
-                            if (!comparacao.erro) {
-                                const emoji = comparacao.tendencia === 'Aumento' ? '📈' : comparacao.tendencia === 'Redução' ? '📉' : '➡️';
-                                respostaFinal = `${emoji} *Comparativo Mensal*\n\n` +
-                                    `Mês atual: R$${comparacao.mesAtual}\n` +
-                                    `Mês anterior: R$${comparacao.mesAnterior}\n` +
-                                    `Diferença: R$${comparacao.diferenca} (${comparacao.variacao > 0 ? '+' : ''}${comparacao.variacao}%)\n` +
-                                    `Tendência: ${comparacao.tendencia}`;
-                            } else {
-                                respostaFinal = comparacao.mensagem;
-                            }
-                        }
-
-                        if (respostaFinal) {
-                            await client.sendMessage(chatId, respostaFinal);
-                            adicionarAoHistorico(chatId, 'model', [{ text: respostaFinal }]);
-                        }
-                    } catch (error) {
-                        console.error('❌ Erro ao processar comando financeiro:', error.message);
-                        await client.sendMessage(chatId, '❌ Erro ao processar comando financeiro.');
+            if (isCalendarCommand(respostaIA)) {
+                const respostaCalendario = await handleCalendarCommand(client, chatId, respostaIA);
+                if (respostaCalendario) {
+                    await client.sendMessage(chatId, respostaCalendario);
+                    adicionarAoHistorico(chatId, 'model', [{ text: respostaCalendario }]);
+                } else if (respostaIA.startsWith('/evento')) {
+                    const analiseOriginal = respostaIA.split('/evento')[0].trim();
+                    if (analiseOriginal) {
+                        await client.sendMessage(chatId, filtrarPensamentos(analiseOriginal));
                     }
                 }
-                // --- SETUP COMMAND ---
-                else if (respostaIA.toLowerCase().trim() === '/setup pascom' || lowerCaseBody === '/setup pascom') {
-                    if (isGroup) {
-                        setPascomGroupId(chatId);
-                        await client.sendMessage(chatId, '✅ Este grupo foi configurado como o grupo oficial da **PASCOM**! Notificações do calendário serão enviadas aqui.');
-                    } else {
-                        await client.sendMessage(chatId, '❌ Este comando deve ser usado dentro de um grupo.');
-                    }
+                return;
+            }
+
+            if (isACCommand(respostaIA)) {
+                // Remove thinking/reasoning before command if present
+                const cmdLine = respostaIA.split('\n').find(l => l.startsWith('/ac'));
+                if (cmdLine) {
+                    const res = await handleACCommand(client, chatId, cmdLine);
+                    await client.sendMessage(chatId, res);
+                    adicionarAoHistorico(chatId, 'model', [{ text: res }]);
                     return;
                 }
-                else if (ehComandoCalendario) {
-                    const respostaCalendario = await processarComandoCalendario(client, respostaIA, chatId); // Passa a string diretamente
-                    if (respostaCalendario) {
-                        await client.sendMessage(chatId, respostaCalendario);
-                        // Adiciona a resposta formatada do calendário ao histórico também
-                        adicionarAoHistorico(chatId, 'model', [{ text: respostaCalendario }]);
-                    } else if (respostaIA.startsWith('/evento')) {
-                        const analiseOriginal = respostaIA.split('/evento')[0].trim();
-                        if (analiseOriginal) {
-                            await client.sendMessage(chatId, filtrarPensamentos(analiseOriginal));
-                        } else {
-                            console.log("Comando /evento recebido, mas não gerou ação de calendário nem tinha texto prévio.");
-                        }
-                    }
-                } else {
-                    await client.sendMessage(chatId, respostaIA);
-                }
             }
-            // Se não houve resposta válida, envia uma mensagem de erro única
-            if (!respostaIA || respostaIA.startsWith('❌')) {
-                const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';
-                await client.sendMessage(chatId, mensagemErro);
-                adicionarAoHistorico(chatId, 'model', [{ text: mensagemErro }]);
-            }
+
+            // Texto normal — envia direto
+            console.log('🤖 Resposta enviada:', respostaFinal);
+            await client.sendMessage(chatId, respostaFinal);
         }
+
+        // Se não houve resposta válida
+        if (!respostaIA || respostaIA.startsWith('❌')) {
+            const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';
+            await client.sendMessage(chatId, mensagemErro);
+            adicionarAoHistorico(chatId, 'model', [{ text: mensagemErro }]);
+        }
+
     } catch (error) {
         console.error('\n❌ Erro ao processar mensagem:', error);
         await client.sendMessage(chatId, '❌ Ocorreu um erro interno ao processar sua mensagem.');
-        // Adiciona erro ao histórico
-        adicionarAoHistorico(chatId, 'model', [{ text: `❌ Erro interno no processamento: ${error.message}` }]); // Adiciona mais detalhes do erro
-    }
-}
-
-async function processarComandoCalendario(client, comandoCompleto, chatId) {
-    try {
-        console.log('\n🔍 Processando comando Groq para calendário:', comandoCompleto);
-        console.log('📱 ChatId recebido:', chatId);
-        const auth = await getGoogleAuth();
-        let mensagemResposta = '';
-        let comandoExecutado = false; // Flag para saber se algum comando foi realmente executado
-
-        // Extrai o comando principal (ex: /list, /today)
-        const comando = comandoCompleto.split(' ')[0];
-        // Extrai os argumentos (se houver)
-        const args = comandoCompleto.split(' ').slice(1);
-
-        // --- Tratamento dos Comandos ---
-        switch (comando) {
-            case '/evento':
-                // ... (lógica existente para /evento e /add subsequente) ...
-                const partesEvento = comandoCompleto.split('\n');
-                // Procura por um /add dentro da resposta /evento
-                const comandoAddEmEvento = partesEvento.find(p => p.startsWith('/add'));
-                if (comandoAddEmEvento) {
-                    console.log('\n📅 Processando evento extraído de imagem/texto...');
-                    try {
-                        const eventoInfo = comandoAddEmEvento.substring(5).trim(); // Remove '/add '
-
-                        // Lógica de Roteamento de Calendário por Contexto
-                        // Se for grupo (@g.us), usa Pascom. Se for privado, usa Pessoal.
-                        const isGroup = chatId.endsWith('@g.us');
-                        const targetCalendar = isGroup ? PASCOM_CALENDAR_ID : null;
-
-                        const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
-                        comandoExecutado = true;
-
-                        const inicio = new Date(evento.start.dateTime || evento.start.date);
-                        const fim = new Date(evento.end.dateTime || evento.end.date);
-
-                        const emojiTipo = isGroup ? '⛪' : '✨';
-                        const nomeCalendario = isGroup ? 'PASCOM' : 'Pessoal';
-
-                        mensagemResposta = `> *Evento Adicionado com Sucesso (${nomeCalendario})* ${emojiTipo}\n\n` +
-                            `📝 *${evento.summary}*\n` +
-                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
-                            (evento.description ? `📋 ${evento.description}\n` : '') +
-                            (evento.location ? `📍 ${evento.location}\n` : '');
-                    } catch (error) {
-                        console.error('\n❌ Erro ao adicionar evento extraído:', error);
-                        mensagemResposta = `❌ Erro ao adicionar o evento extraído: ${error.message || 'Verifique o formato.'}`;
-                    }
-                } else {
-                    console.log('\n⚠️ Comando /evento sem /add subsequente.');
-                    // Retorna null para que a análise da imagem/texto original seja enviada
-                    return null;
-                }
-                break; // Sai do switch para /evento
-
-            case '/add':
-                // Lógica de Roteamento de Calendário por Contexto
-                const isGroup = chatId.endsWith('@g.us');
-                const targetCalendar = isGroup ? PASCOM_CALENDAR_ID : null;
-                const emojiTipo = isGroup ? '⛪' : '✨';
-                const nomeCalendario = isGroup ? 'PASCOM' : ''; // Sem nome para pessoal para manter limpo
-
-                // Trata múltiplos /add se estiverem na mesma linha (improvável, mas seguro) ou múltiplas linhas
-                const comandosAdd = comandoCompleto.split('\n').filter(cmd => cmd.trim().startsWith('/add'));
-                if (comandosAdd.length > 1) {
-                    console.log('\n📅 Processando múltiplos eventos...');
-                    let eventosAdicionados = [];
-                    let erros = [];
-                    for (const cmdAdd of comandosAdd) {
-                        try {
-                            const eventoInfo = cmdAdd.trim().substring(5); // Remove '/add '
-                            const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
-                            eventosAdicionados.push(evento);
-                            comandoExecutado = true;
-                        } catch (error) {
-                            console.error('\n❌ Erro ao adicionar evento múltiplo:', error);
-                            erros.push(cmdAdd); // Guarda o comando que falhou
-                        }
-                    }
-                    // ... (lógica de formatação da resposta para múltiplos eventos) ...
-                    if (eventosAdicionados.length > 0) {
-                        mensagemResposta = `> *${eventosAdicionados.length} Evento(s) Adicionado(s) com Sucesso ${nomeCalendario}* ${emojiTipo}\n\n`;
-                        eventosAdicionados.forEach((evento) => {
-                            const inicio = new Date(evento.start.dateTime || evento.start.date);
-                            const fim = new Date(evento.end.dateTime || evento.end.date);
-                            mensagemResposta += `📝 *${evento.summary}*\n`;
-                            mensagemResposta += `📅 Início: ${inicio.toLocaleString('pt-BR')}\n`;
-                            mensagemResposta += `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n`;
-                            if (evento.description) mensagemResposta += `📋 ${evento.description}\n`;
-                            if (evento.location) mensagemResposta += `📍 ${evento.location}\n`;
-                            mensagemResposta += '\n';
-                        });
-                    }
-                    if (erros.length > 0) {
-                        mensagemResposta += `\n❌ Falha ao adicionar ${erros.length} evento(s). Verifique os dados e tente novamente.`;
-                    }
-                    if (eventosAdicionados.length === 0 && erros.length > 0) {
-                        mensagemResposta = `❌ Falha ao adicionar evento(s). Verifique os dados e tente novamente.`;
-                    }
-
-                } else { // Apenas um /add
-                    console.log('\n📅 Processando evento único...');
-                    try {
-                        const eventoInfo = comandoCompleto.substring(5).trim(); // Remove '/add '
-                        const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
-                        comandoExecutado = true;
-                        // ... (lógica de formatação da resposta para evento único) ...
-                        const inicio = new Date(evento.start.dateTime || evento.start.date);
-                        const fim = new Date(evento.end.dateTime || evento.end.date);
-                        mensagemResposta = `> *Evento Adicionado com Sucesso ${nomeCalendario}* ${emojiTipo}\n\n` +
-                            `📝 *${evento.summary}*\n` +
-                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
-                            (evento.description ? `📋 ${evento.description}\n` : '') +
-                            (evento.location ? `📍 ${evento.location}\n` : '');
-
-                    } catch (error) {
-                        console.error('\n❌ Erro ao adicionar evento único:', error);
-                        mensagemResposta = `❌ Erro ao adicionar evento: ${error.message || 'Verifique o formato.'}`;
-                    }
-                }
-                break; // Sai do switch para /add
-
-            case '/add_pascom':
-                console.log('\n📅 Processando evento PASCOM...');
-                try {
-                    const eventoInfo = comandoCompleto.substring(12).trim(); // Remove '/add_pascom '
-                    // Passa o ID do calendário da Pascom
-                    const evento = await adicionarEvento(auth, eventoInfo, PASCOM_CALENDAR_ID);
-                    comandoExecutado = true;
-
-                    const inicio = new Date(evento.start.dateTime || evento.start.date);
-                    const fim = new Date(evento.end.dateTime || evento.end.date);
-                    mensagemResposta = `> *Evento PASCOM Adicionado* ⛪✨\n\n` +
-                        `📝 *${evento.summary}*\n` +
-                        `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                        `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
-                        (evento.description ? `📋 ${evento.description}\n` : '') +
-                        (evento.location ? `📍 ${evento.location}\n` : '');
-
-                } catch (error) {
-                    console.error('\n❌ Erro ao adicionar evento Pascom:', error);
-                    mensagemResposta = `❌ Erro ao adicionar evento na Pascom: ${error.message}`;
-                }
-                break;
-
-            case '/list': // Mantém lógica anterior para /list com args
-            case '/today':
-            case '/tomorrow':
-            case '/week':
-            case '/nextweek':
-            case '/month':
-            case '/nextmonth':
-            case '/date':
-            case '/next': // Adiciona /next aqui também
-                comandoExecutado = true;
-                let eventos = [];
-                let titulo = "Eventos";
-                // Determina o período baseado no comando ou argumento do /list
-                let periodo;
-                if (comando === '/list') {
-                    periodo = args.join(' ').toLowerCase() || 'today'; // Junta args para casos como "proxima semana" e default para 'today'
-                } else {
-                    periodo = comando.substring(1); // Remove a barra para /today, /tomorrow etc.
-                }
-
-
-                // Lógica para determinar o período baseado no comando ou argumento
-                if (periodo === 'hoje' || periodo === 'today') {
-                    eventos = await listarEventos(auth); // Função para hoje
-                    titulo = "Eventos para Hoje";
-                } else if (periodo === 'amanha' || periodo === 'tomorrow') {
-                    eventos = await listarEventosAmanha(auth);
-                    titulo = "Eventos para Amanhã";
-                } else if (periodo === 'semana' || periodo === 'week') {
-                    eventos = await listarEventosSemana(auth);
-                    titulo = "Eventos da Semana";
-                } else if (periodo === 'proxima semana' || periodo === 'nextweek') {
-                    eventos = await listarEventosProximaSemana(auth);
-                    titulo = "Eventos da Próxima Semana";
-                } else if (periodo === 'mes' || periodo === 'month') {
-                    eventos = await listarEventosMes(auth);
-                    titulo = "Eventos do Mês";
-                } else if (periodo === 'proximo mes' || periodo === 'nextmonth') {
-                    eventos = await listarEventosProximoMes(auth);
-                    titulo = "Eventos do Próximo Mês";
-                } else if (comando === '/date') { // Comando específico /date
-                    const dataArg = args[0]; // Espera AAAA-MM-DD
-                    if (dataArg && /^\d{4}-\d{2}-\d{2}$/.test(dataArg)) {
-                        eventos = await listarEventosData(auth, dataArg);
-                        // Formata data para o título
-                        try {
-                            const dataObj = new Date(dataArg + 'T00:00:00-03:00'); // Adiciona fuso para conversão
-                            titulo = `Eventos para ${dataObj.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`;
-                        } catch (e) {
-                            titulo = `Eventos para ${dataArg}`; // Fallback
-                        }
-                    } else {
-                        mensagemResposta = '❌ Formato de data inválido para /date. Use AAAA-MM-DD.';
-                    }
-                } else if (periodo === 'proximos' || periodo === 'next') {
-                    // const count = args[0] ? parseInt(args[0]) : 10; // Pega a contagem se houver (opcional)
-                    eventos = await listarProximosEventos(auth); // Usa a função padrão que lista 10
-                    titulo = `Próximos ${eventos.length} Eventos`;
-                } else if (comando === '/list' && args.length > 0) { // Tratamento de /list com args não mapeados
-                    console.warn("Comando /list com argumento não padrão:", args);
-                    eventos = await listarEventos(auth);
-                    titulo = "Eventos para Hoje (Argumento /list não reconhecido)";
-                } else { // Fallback para /list sem args ou comando não reconhecido aqui
-                    eventos = await listarEventos(auth); // Lista eventos de hoje por padrão
-                    titulo = "Eventos para Hoje";
-                }
-
-                // Formata a resposta se não houve erro de data
-                if (mensagemResposta === '') {
-                    mensagemResposta = formatarEventos(eventos, titulo);
-                }
-                break; // Sai do switch para comandos de listagem
-
-            case '/remove':
-                comandoExecutado = true;
-                const eventId = args[0];
-                if (eventId) {
-                    try {
-                        await removerEvento(auth, eventId);
-                        mensagemResposta = '✅ Evento removido com sucesso!';
-                    } catch (error) {
-                        console.error('\n❌ Erro ao remover evento:', error);
-                        mensagemResposta = '❌ Erro ao remover evento.';
-                    }
-                } else {
-                    mensagemResposta = '❌ ID do evento não fornecido para remoção via /remove.';
-                }
-                break; // Sai do switch para /remove
-
-            case '/delete':
-                // TODO: Implementar a lógica de conversação para exclusão de eventos.
-                comandoExecutado = true;
-                console.log('\n🗑️ Recebido comando /delete, iniciando fluxo de remoção...');
-                // A lógica original de /delete iniciava uma conversa.
-                // Como o LLM retorna apenas /delete, precisamos decidir como lidar com isso.
-                // Opção 1: Listar eventos de hoje para o usuário escolher.
-                const eventosHoje = await listarEventos(auth); // Lista eventos de hoje
-                if (eventosHoje && eventosHoje.length > 0) {
-                    let listaParaRemover = "Qual evento você gostaria de remover? Responda com o número:\n\n";
-                    eventosHoje.forEach((evento, index) => {
-                        const inicio = new Date(evento.start.dateTime || evento.start.date);
-                        listaParaRemover += `${index + 1}. *${evento.summary}* (${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})\n`;
-                    });
-                    mensagemResposta = listaParaRemover;
-
-                    // Define o estado da conversa para aguardar a seleção do usuário
-                    if (!chatId) {
-                        console.error('❌ ChatId não definido no comando /delete');
-                        mensagemResposta = "❌ Erro interno: ChatId não encontrado.";
-                    } else {
-                        conversationState[chatId] = {
-                            action: 'awaiting_delete_selection',
-                            events: eventosHoje
-                        };
-                        console.log(`📝 Estado definido para ${chatId}: aguardando seleção para remoção.`);
-                    }
-
-                } else {
-                    mensagemResposta = "📅 Não há eventos hoje para remover.";
-                }
-                break; // Sai do switch para /delete
-
-
-            default:
-                console.warn(`Comando de calendário não reconhecido dentro de processarComandoCalendario: ${comando}`);
-                // Retorna null para que a mensagem original (o comando não tratado) seja potencialmente enviada.
-                return null;
-        }
-        // --- Fim Tratamento ---
-
-        // Retorna a mensagem formatada OU null se nenhum comando válido foi executado
-        return comandoExecutado ? mensagemResposta : null;
-
-    } catch (error) {
-        console.error('\n❌ Erro geral ao processar comando do calendário:', error);
-        return '❌ Ocorreu um erro ao processar o comando do calendário.';
+        adicionarAoHistorico(chatId, 'model', [{ text: `❌ Erro interno no processamento: ${error.message}` }]);
     }
 }
 

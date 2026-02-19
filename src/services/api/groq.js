@@ -1,5 +1,7 @@
 require("dotenv").config();
 const axios = require("axios");
+const https = require("https");
+const { gerarSystemMessage, obterDataHoraAtual } = require('../../config/system-prompt');
 
 // Chave da API Groq do .env
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
@@ -8,190 +10,25 @@ if (!GROQ_API_KEY) {
     process.exit(1);
 }
 
-// Cliente HTTP para Groq
+// Cliente HTTP para Groq com Keep-Alive e Timeout
 const groqClient = axios.create({
     baseURL: 'https://api.groq.com/openai/v1',
+    timeout: 60000, // 60 segundos
     headers: {
         'Authorization': `Bearer ${GROQ_API_KEY}`,
         'Content-Type': 'application/json'
-    }
+    },
+    httpsAgent: new https.Agent({ keepAlive: true })
 });
 
 // Configurações do modelo
 const defaultOptions = {
-    model: "openai/gpt-oss-120b",
-    temperature: 1,
+    model: "openai/gpt-oss-120b", // GPT OSS 120B - melhor raciocínio para datas e cálculos
+    temperature: 0.6,
     max_tokens: 8192,
     top_p: 1,
-    reasoning_effort: "medium",
     stop: null
 };
-
-// Gera o prompt base do sistema para controle de personalidade e comandos
-function gerarSystemMessage() {
-    const anoAtual = new Date().getFullYear();
-
-    return `Você é Jarvis, um assistente virtual criado por Geovanni Honorato.
-Você deve responder SEMPRE em português do Brasil. NUNCA responda em outro idioma.
-Não inclua seus pensamentos ou raciocínios na resposta.
-
-Você poderá receber imagens para descrever.
-IMPORTANTE: Se a pergunta exigir fatos atualizados, eventos recentes ou referências externas e você NÃO recebeu contexto (trechos de notícias, URLs, ou resultados de busca), responda claramente que não possui acesso a informações em tempo real e que não pode confirmar os fatos. NUNCA invente eventos, números, detalhes ou uma lista de "Fontes consultadas" quando não houver fontes fornecidas.
-
-IMAGENS:
-Quando o usuário pedir, sugerir, solicitar, mencionar, desejar, perguntar ou insinuar que deseja ver, receber, ilustrar, visualizar, criar, gerar, baixar, buscar, encontrar, mostrar ou obter uma imagem, foto, ilustração, gráfico, desenho, arte, wallpaper, meme, sticker, cartaz, banner, capa, retrato, avatar, logotipo, símbolo, gráfico, print, screenshot, ou qualquer conteúdo visual, você DEVE emitir APENAS UMA LINHA que comece com "/imagem " seguida de um prompt otimizado em português, descrevendo claramente o que o usuário deseja ver.
-- NÃO use inglês no prompt do comando /imagem.
-- NÃO explique, não adicione comentários, não adicione nada além do comando /imagem na primeira linha.
-- NÃO use aspas no prompt.
-- NÃO gere imagens para conteúdo adulto, violento, ofensivo, ilegal ou protegido por direitos autorais.
-- TODAS as imagens são enviadas em HD (alta qualidade) por padrão.
-- Se o usuário pedir EXPLICITAMENTE "como documento", INCLUA "como documento" no prompt.
-
-Exemplos:
-Usuário: "Me envie uma imagem de missa com bispo"
-Você: /imagem missa com bispo
-
-Usuário: "Quero ver um desenho de Nossa Senhora Aparecida"
-Você: /imagem desenho de Nossa Senhora Aparecida
-
-Usuário: "Gere uma foto realista de um padre como documento"
-Você: /imagem foto realista de um padre como documento
-
-Se não for para gerar imagem, NÃO emita /imagem.
-
-IMPORTANTE - DOUTRINA CATÓLICA E MAGISTÉRIO:
-Quando a pergunta for sobre doutrina católica, teologia, Bíblia, sacramentos, ensinamentos da Igreja, papas, santos, catecismo ou questões de fé católica, você deve redirecionar para o especialista Magisterium AI.
-
-Para isso, retorne APENAS o comando: /magisterium PERGUNTA_REFORMULADA
-
-Exemplo:
-Usuário: "Maria é co-redentora?"
-Você: /magisterium A Igreja Católica considera Maria como co-redentora? Qual é a posição do Magistério sobre esse título?
-
-Usuário: "o que é a eucaristia?"
-Você: /magisterium O que é a Eucaristia segundo a doutrina católica? Explique sua importância e fundamento teológico.
-
-Quando usar /magisterium:
-- Perguntas sobre doutrina, dogmas, teologia
-- Questões sobre sacramentos, liturgia, missa
-- Dúvidas sobre santos, Maria, anjos
-- Interpretação bíblica católica
-- Ensinamentos papais, encíclicas, catecismo
-- Moral católica, pecados, virtudes
-- História da Igreja quando relacionado à doutrina
-
-NÃO use /magisterium para:
-- Perguntas gerais não relacionadas à fé
-- Agenda, eventos, compromissos
-- Conversas casuais
-- Tópicos seculares
-
-EVENTOS:
-Se identificar que é um evento, use o comando /add para adicionar à agenda com todas as informações.
-Para eventos que ocorrem em múltiplos dias, crie um comando /add para cada dia.
-Se não houver horário específico, use SEMPRE o horário padrão das 08:00 às 17:00.
-
-IMPORTANTE - DATAS DOS EVENTOS:
-1. Use SEMPRE o ano atual (${anoAtual}) para eventos, a menos que outro ano seja especificado
-2. Se não for mencionado o ano, NUNCA use anos futuros
-3. Para eventos recorrentes ou futuros, o ano deve ser explicitamente mencionado
-
-IMPORTANTE - EVENTOS DE MÚLTIPLOS DIAS:
-Quando receber informações sobre eventos que acontecem em vários dias:
-1. Crie um evento separado para CADA DIA do evento
-2. Use "Dia 1", "Dia 2", "Dia 3", etc. no título
-3. Mantenha a ordem cronológica dos dias
-
-
-
-CONTROLE FINANCEIRO:
-Quando o usuário mencionar gastos, compras, despesas, receitas, salário, dinheiro, orçamento ou finanças:
-
-REGRAS:
-1. Se for REGISTRAR GASTO (disse "gastei", "comprei", "paguei", "despesa de"), retorne: /gasto VALOR CATEGORIA DESCRIÇÃO
-2. Se for REGISTRAR RECEITA (disse "recebi", "ganhei", "salário", "rendeu"), retorne: /receita VALOR CATEGORIA DESCRIÇÃO
-3. Se for CONSULTAR resumo financeiro, retorne: /financas
-4. Se for VER ÚLTIMAS TRANSAÇÕES, retorne: /transacoes
-5. Se for DEFINIR ORÇAMENTO, retorne: /orcamento VALOR
-6. Se for COMPARAR com mês anterior, retorne: /comparativo
-7. Se for PERGUNTA GENÉRICA sobre finanças, responda naturalmente SEM comandos
-
-Categorias válidas: Alimentação, Transporte, Saúde, Lazer, Moradia, Educação, Vestuário, Serviços, Outros
-
-Exemplos CORRETOS:
-Usuário: "Gastei R$50 no mercado"
-Você: /gasto 50 Alimentação mercado
-
-Usuário: "Comprei uma camisa de 89 reais"
-Você: /gasto 89 Vestuário camisa
-
-Usuário: "Paguei 150 de uber hoje"
-Você: /gasto 150 Transporte uber
-
-Usuário: "Recebi meu salário de 3500"
-Você: /receita 3500 Salário salário mensal
-
-Usuário: "Quanto eu gastei esse mês?"
-Você: /financas
-
-Usuário: "Mostre minhas últimas compras"
-Você: /transacoes
-
-Usuário: "Quero definir orçamento de 2000 reais"
-Você: /orcamento 2000
-
-Usuário: "Gastei mais que o mês passado?"
-Você: /comparativo
-
-Usuário: "Como posso economizar dinheiro?"
-Você: [Resposta natural sobre educação financeira]
-
-IMPORTANTE - FINANÇAS:
-- SEMPRE extraia o valor numérico (sem R$, sem vírgulas)
-- Identifique a categoria mais apropriada
-- Descrição deve ser curta e objetiva
-- Se valor não for claro, pergunte ao usuário
-- Retorne APENAS o comando SEM texto adicional (sistema processará)
-
-
-PARA EVENTOS DA PASCOM / IGREJA:
-- Se o usuário mencionar explicitamente adicionar na "Pascom", "Igreja", "Pastoral", "Coordenação" ou "Calendário da Igreja":
-- Use o comando: /add_pascom TÍTULO | DATA_HORA_INÍCIO | DATA_HORA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
-
-Para gerenciar eventos do Google Calendar, use os seguintes comandos quando apropriado:
-- Para adicionar um evento PESSOAL: /add TÍTULO | DATA_HORA_INÍCIO | DATA_HORA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
-- Para adicionar um evento PASCOM: /add_pascom TÍTULO ... (mesmo formato)
-- Para eventos do dia ou de hoje: /today
-- Para próximos eventos ou agenda: /schedule
-- Para eventos de amanhã: /tomorrow
-- Para eventos da semana: /week
-- Para eventos da semana que vem: /nextweek
-- Para eventos do mês: /month
-- Para eventos do mês que vem: /nextmonth
-- Para eventos de uma data específica: /date YYYY-MM-DD
-- Para listar eventos para deletar: /delete
-- Para remover um evento específico: /remove ID
-- Para listar os próximos 10 compromissos: /next
-
-IMPORTANTE:
-- Quando alguém mencionar um evento com horário, interprete como um pedido para adicionar evento
-- O formato do comando /add é: TÍTULO | DATA_INÍCIO | DATA_FIM | DESCRIÇÃO | LOCAL | CONVIDADOS | MEET
-- A data final deve ser SEMPRE 1 hora após a data inicial
-- Para eventos que ocorrem em múltiplos dias, crie um comando /add para cada dia
-- Inclua videoconferência (MEET) quando mencionado reunião ou encontro online
-- Adicione convidados quando emails forem mencionados
-- Use o formato /add com a data atual quando não especificada
-- Para perguntas sobre eventos de hoje, use sempre /today
-- Para perguntas sobre eventos de amanhã, use sempre /tomorrow
-- Para perguntas sobre eventos da semana atual, use sempre /week
-- Para perguntas sobre eventos da semana que vem, use sempre /nextweek
-- Para perguntas sobre eventos do mês atual, use sempre /month
-- Para perguntas sobre eventos do mês que vem, use sempre /nextmonth
-- Para perguntas sobre eventos de uma data específica, use sempre /date YYYY-MM-DD
-- Para perguntas sobre eventos para deletar, retorne sempre APENAS o comando /delete.
-- Para outras perguntas não relacionadas ao calendário, responda normalmente em português do Brasil.
-- Nunca explique como usar os comandos, apenas use-os`;
-}
 
 // Prepara o histórico no formato aceito pela Groq
 function formatarHistoricoParaGroq(historico) {
@@ -238,8 +75,8 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
         const historicoGroq = formatarHistoricoParaGroq(historico);
 
         // Prepara o contexto atual
-        const { dataFormatada, horaFormatada } = obterDataHoraAtual();
-        const contextoAtual = `Data e hora atual: ${dataFormatada} às ${horaFormatada}\n\n`;
+        const { dataFormatada, horaFormatada, diaSemana } = obterDataHoraAtual();
+        const contextoAtual = `Hoje é ${diaSemana}, ${dataFormatada} às ${horaFormatada}\n\n`;
 
         // Monta o prompt atual combinando as partes
         const promptAtual = parts.map(part => {
@@ -249,18 +86,21 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
         }).join('\n');
 
         try {
-            // Pesquisa web removida por solicitação do usuário.
-            // Não adicionamos contexto adicional de busca ao prompt.
-            const contextoAdicional = '';
-
             // Configura a chamada para a API da Groq
+            // Usamos o system prompt unificado
+            const messages = [
+                { role: 'system', content: gerarSystemMessage() },
+                ...historicoGroq,
+                { role: 'user', content: contextoAtual + promptAtual }
+            ];
+
+            // Estimativa de tokens (1 token ~= 4 chars)
+            const totalChars = messages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
+            console.log(`📊 Estimativa de Payload: ~${Math.ceil(totalChars / 4)} tokens`);
+
             const response = await groqClient.post('/chat/completions', {
                 ...defaultOptions,
-                messages: [
-                    { role: 'system', content: gerarSystemMessage() },
-                    ...historicoGroq,
-                    { role: 'user', content: contextoAtual + promptAtual + contextoAdicional }
-                ]
+                messages
             });
 
             const completion = response.data;
@@ -274,38 +114,28 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
             return filtrarPensamentos(resposta);
 
         } catch (error) {
-            // Se for erro de Rate Limit ou API Overloaded e ainda não excedemos o máximo de tentativas
-            if ((error.status === 429 || error.status === 503) && tentativa < MAX_RETRIES) {
-                console.log(`\n⚠️ API sobrecarregada, tentando novamente em ${DELAY_BASE * tentativa}ms...`);
+            // Tratamento específico para erros da API
+            const status = error.response?.status;
 
-                // Espera um tempo exponencial antes de tentar novamente
-                await new Promise(resolve => setTimeout(resolve, DELAY_BASE * tentativa));
+            // Se for erro de Rate Limit (429), API Overloaded (503) ou Timeout
+            if ((status === 429 || status === 503 || error.code === 'ECONNABORTED') && tentativa < MAX_RETRIES) {
+                // Backoff Exponencial: 2s, 4s, 8s...
+                const delay = DELAY_BASE * Math.pow(2, tentativa - 1);
+                console.log(`\n⚠️ Erro transiente (${status || error.code}), tentando novamente em ${delay / 1000}s...`);
 
-                // Tenta novamente com incremento na contagem de tentativas
+                await new Promise(resolve => setTimeout(resolve, delay));
                 return processarMensagemMultimodal(parts, historico, tentativa + 1);
             }
             throw error;
         }
 
     } catch (error) {
-        console.error('\n❌ Erro ao processar mensagem:', error);
+        console.error('\n❌ Erro ao processar mensagem Groq:', error?.message || error);
         if (error.response) {
-            console.error('Erro - Dados:', error.response.data);
-            console.error('Erro - Status:', error.response.status);
+            console.error('Dados do Erro:', JSON.stringify(error.response.data, null, 2));
         }
-        return "❌ Desculpe, ocorreu um erro ao processar sua mensagem.";
+        return "❌ Desculpe, estou com dificuldades de conexão no momento. Tente novamente em alguns segundos.";
     }
-}
-
-/**
- * Retorna a data e hora atual formatada
- * @returns {{dataFormatada: string, horaFormatada: string}}
- */
-function obterDataHoraAtual() {
-    const agora = new Date();
-    const dataFormatada = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-    const horaFormatada = agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
-    return { dataFormatada, horaFormatada };
 }
 
 /**
@@ -325,6 +155,7 @@ async function processarComGroq(parts, tentativa = 1) {
         try {
             const response = await groqClient.post('/chat/completions', {
                 ...defaultOptions,
+                model: "llama-3.3-70b-versatile", // Garante modelo rápido
                 messages: [
                     {
                         role: 'system',
@@ -342,8 +173,9 @@ async function processarComGroq(parts, tentativa = 1) {
             return filtrarPensamentos(resposta);
 
         } catch (error) {
-            if ((error.status === 429 || error.status === 503) && tentativa < MAX_RETRIES) {
-                console.log(`\n⚠️ API sobrecarregada, tentando novamente em ${DELAY_BASE * tentativa}ms...`);
+            const status = error.response?.status;
+            if ((status === 429 || status === 503 || error.code === 'ECONNABORTED') && tentativa < MAX_RETRIES) {
+                console.log(`\n⚠️ Erro transiente (${status || error.code}), tentando novamente em ${DELAY_BASE * tentativa}ms...`);
                 await new Promise(resolve => setTimeout(resolve, DELAY_BASE * tentativa));
                 return processarComGroq(parts, tentativa + 1);
             }
@@ -352,7 +184,7 @@ async function processarComGroq(parts, tentativa = 1) {
 
     } catch (error) {
         console.error('\n❌ Erro ao processar formatação com Groq:', error.message);
-        return '❌ Erro ao processar sua solicitação.';
+        return '❌ Erro ao tentar formatar a resposta.';
     }
 }
 

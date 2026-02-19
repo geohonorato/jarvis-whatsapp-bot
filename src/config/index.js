@@ -58,7 +58,7 @@ const config = {
         },
         calendar: {
             id: requireEnv('CALENDAR_ID'),
-            credentialsPath: process.env.CALENDAR_CREDENTIALS_PATH || 'credentials.json',
+            credentialsPath: process.env.CALENDAR_CREDENTIALS_PATH || 'data/credentials.json',
         },
     },
 
@@ -73,8 +73,9 @@ const config = {
     // Cache e Memória
     cache: {
         // Tempo de vida do cache em milissegundos
+        // Tempo de vida do cache em milissegundos
         eventsTTL: getEnvInt('CACHE_EVENTS_TTL', 5 * 60 * 1000), // 5 minutos
-        maxHistoryMessages: getEnvInt('MAX_HISTORY_MESSAGES', 100), // 50 turnos = 100 mensagens
+        maxHistoryMessages: getEnvInt('MAX_HISTORY_MESSAGES', 20), // 10 turnos = 20 mensagens (Reduzido para economizar tokens)
         maxHistoryAge: getEnvInt('MAX_HISTORY_AGE', 24 * 60 * 60 * 1000), // 24 horas
         cleanupInterval: getEnvInt('CACHE_CLEANUP_INTERVAL', 60 * 60 * 1000), // 1 hora
     },
@@ -96,8 +97,8 @@ const config = {
 
     // Arquivos temporários
     temp: {
-        imagesDir: process.env.TEMP_IMAGES_DIR || 'temp_images',
-        tempDir: process.env.TEMP_DIR || 'temp',
+        imagesDir: process.env.TEMP_IMAGES_DIR || 'data/temp_images',
+        tempDir: process.env.TEMP_DIR || 'data/temp',
         cleanupInterval: getEnvInt('TEMP_CLEANUP_INTERVAL', 60 * 60 * 1000), // 1 hora
         maxAge: getEnvInt('TEMP_MAX_AGE', 24 * 60 * 60 * 1000), // 24 horas
     },

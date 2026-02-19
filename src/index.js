@@ -4,11 +4,23 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 
-// Criar diretórios necessários
+// Criar/Limpar diretórios temporários (dentro de data/)
 const dirs = ['temp', 'temp_images'];
 dirs.forEach(dir => {
-  const dirPath = path.join(__dirname, '..', dir);
-  if (!fs.existsSync(dirPath)) {
+  const dirPath = path.join(__dirname, '..', 'data', dir);
+
+  // Se existir, limpa conteúdo antigo (segurança contra crash/restart)
+  if (fs.existsSync(dirPath)) {
+    try {
+      const files = fs.readdirSync(dirPath);
+      for (const file of files) {
+        fs.unlinkSync(path.join(dirPath, file));
+      }
+      console.log(`🧹 Diretório limpo na inicialização: ${dir}`);
+    } catch (e) {
+      console.error(`⚠️ Erro ao limpar ${dir}:`, e.message);
+    }
+  } else {
     fs.mkdirSync(dirPath, { recursive: true });
   }
 });

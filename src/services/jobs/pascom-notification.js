@@ -1,12 +1,12 @@
-const { PASCOM_CALENDAR_ID, CALENDAR_ID, getGoogleAuth } = require('../api/calendar');
+const { PASCOM_CALENDAR_ID, getGoogleAuth } = require('../api/calendar');
 const { google } = require('googleapis');
 const fs = require('fs');
 const path = require('path');
 
 // Caminho para salvar IDs de eventos já notificados
-const NOTIFIED_CACHE_PATH = path.join(__dirname, '../../../.pascom_notified_cache.json');
+const NOTIFIED_CACHE_PATH = path.join(__dirname, '../../../data/pascom_notified_cache.json');
 // Caminho para salvar configuração do grupo
-const CONFIG_PATH = path.join(__dirname, '../../../.pascom_config.json');
+const CONFIG_PATH = path.join(__dirname, '../../../data/pascom_config.json');
 
 // Carrega cache (Objeto: { "eventKey": ["2weeks", "1week", "1day", "morning"] })
 let notifiedCache = {};
@@ -94,13 +94,6 @@ function saveCache() {
 
 async function checarEventosPascom(client) {
     const groupId = await getPascomGroupId(client);
-
-    // DEBUG: Verificando IDs
-    console.log('\n🔍 --- DEBUG CALENDÁRIOS ---');
-    console.log('📅 PASCOM_ID:', PASCOM_CALENDAR_ID);
-    console.log('👤 PERSONAL_ID:', CALENDAR_ID);
-    console.log('---------------------------\n');
-
     if (!groupId) {
         // console.log('⚠️ Verificação Pascom ignorada: ID do grupo não configurado.');
         return;

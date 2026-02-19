@@ -118,12 +118,12 @@ function getCredentials() {
     }
 
     // Fallback para arquivo local
-    const credentialsPath = path.join(__dirname, '../../../credentials.json');
+    const credentialsPath = path.join(__dirname, '../../../data/credentials.json');
     console.log('📂 Buscando credenciais em arquivo:', credentialsPath);
 
     if (!existsSync(credentialsPath)) {
         console.error('❌ credentials.json não encontrado e GOOGLE_CREDENTIALS não definida!');
-        console.error('💡 Dica: Adicione GOOGLE_CREDENTIALS como variável de ambiente ou coloque credentials.json na raiz do projeto');
+        console.error('💡 Dica: Adicione GOOGLE_CREDENTIALS como variável de ambiente ou coloque credentials.json em data/');
         throw new Error('Credenciais do Google Calendar não encontradas');
     }
 
@@ -389,15 +389,31 @@ async function adicionarEvento(auth, eventoInfo, targetCalendarId = null) {
         // Parse das informações do evento
         const [titulo, dataInicio, dataFim, descricao, local] = eventoInfo.split('|').map(item => item.trim());
 
+        // Parse de data no formato brasileiro (dd/mm/yyyy HH:mm)
+        function parseDateBR(str) {
+            // Tenta formatos: "dd/mm/yyyy HH:mm", "dd/mm/yyyy", "yyyy-mm-dd HH:mm", ISO
+            const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})$/);
+            if (brMatch) {
+                const [, day, month, year, hour, min] = brMatch;
+                return new Date(year, month - 1, day, hour, min);
+            }
+            const brDateOnly = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+            if (brDateOnly) {
+                const [, day, month, year] = brDateOnly;
+                return new Date(year, month - 1, day);
+            }
+            return new Date(str); // fallback para ISO/outros formatos
+        }
+
         const evento = {
             summary: titulo,
             description: descricao,
             start: {
-                dateTime: new Date(dataInicio).toISOString(),
+                dateTime: parseDateBR(dataInicio).toISOString(),
                 timeZone: 'America/Sao_Paulo',
             },
             end: {
-                dateTime: new Date(dataFim).toISOString(),
+                dateTime: parseDateBR(dataFim).toISOString(),
                 timeZone: 'America/Sao_Paulo',
             }
         };
@@ -405,21 +421,6 @@ async function adicionarEvento(auth, eventoInfo, targetCalendarId = null) {
         if (local) evento.location = local;
 
         const calendarId = targetCalendarId || CALENDAR_ID;
-
-        // Verifica conflitos
-        console.log(`\n🔍 Verificando conflitos no calendário (${calendarId})...`);
-        const conflitos = await calendar.events.list({
-            calendarId: calendarId,
-            timeMin: new Date(dataInicio).toISOString(),
-            timeMax: new Date(dataFim).toISOString(),
-            singleEvents: true,
-            timeZone: 'America/Sao_Paulo'
-        });
-
-        if (conflitos.data.items && conflitos.data.items.length > 0) {
-            console.log('⚠️ Conflito detectado:', conflitos.data.items[0].summary);
-            throw new Error(`Conflito de horário! Já existe o evento: "${conflitos.data.items[0].summary}" neste horário.`);
-        }
 
         const response = await calendar.events.insert({
             calendarId: calendarId,

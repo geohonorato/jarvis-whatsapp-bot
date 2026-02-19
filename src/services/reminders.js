@@ -12,19 +12,28 @@ const NOTIFICATION_TIMES = [
 // Controle de eventos já notificados
 const eventosNotificados = new Set();
 
+// Cache do cliente
+let calendarClient = null;
+
+async function getCalendarClient() {
+    if (calendarClient) return calendarClient;
+    const auth = await getGoogleAuth();
+    calendarClient = google.calendar({ version: 'v3', auth });
+    return calendarClient;
+}
+
 async function verificarLembretes(client) {
     try {
-        console.log('\n🔍 Verificando lembretes...');
+        // console.log('\n🔍 Verificando lembretes...'); // Silenciando log repetitivo
 
-        const auth = await getGoogleAuth();
-        const calendar = google.calendar({ version: 'v3', auth });
+        const calendar = await getCalendarClient();
 
         // Busca eventos das próximas 48 horas (para pegar notificações de 24h)
         const agora = new Date();
         const limite = new Date(agora.getTime() + 48 * 60 * 60 * 1000);
 
         const response = await calendar.events.list({
-            calendarId: CALENDAR_ID,
+            calendarId: 'primary', // Usa 'primary' se CALENDAR_ID for indefinido
             timeMin: agora.toISOString(),
             timeMax: limite.toISOString(),
             singleEvents: true,
@@ -48,10 +57,10 @@ async function verificarLembretes(client) {
                 const chaveNotificacao = `${evento.id}_${tempoNotificacao}`;
 
                 // Se está no momento de notificar e ainda não foi notificado
-                if (minutosAteEvento <= tempoNotificacao && 
-                    minutosAteEvento > tempoNotificacao - 1 && 
+                if (minutosAteEvento <= tempoNotificacao &&
+                    minutosAteEvento > tempoNotificacao - 1 &&
                     !eventosNotificados.has(chaveNotificacao)) {
-                    
+
                     console.log(`\n⏰ Enviando notificação para: ${evento.summary}`);
 
                     let tempoFormatado;
