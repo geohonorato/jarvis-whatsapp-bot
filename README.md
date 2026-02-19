@@ -1,331 +1,334 @@
 # 🤖 Jarvis WhatsApp Bot
 
-Assistente inteligente para WhatsApp com suporte a múltiplas IAs, calendário, rastreamento de hidratação e geração de imagens.
+Assistente pessoal inteligente para WhatsApp com múltiplas IAs, geração de imagens, controle financeiro, agenda, execução de código e automações — tudo direto pelo chat.
 
 [![Node.js](https://img.shields.io/badge/Node.js-18.x-green.svg)](https://nodejs.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](Dockerfile)
-
----
-
-## 🚀 Quick Start
-
-### Instalação Rápida
-
-```bash
-# Clone e instale
-git clone https://github.com/geohonorato/jarvis-whatsapp-bot.git
-cd jarvis-whatsapp-bot
-npm install
-
-# Configure ambiente
-cp .env.example .env
-# Edite .env com suas credenciais
-
-# Inicie
-npm start
-```
-
-### Variáveis de Ambiente
-
-```env
-# APIs (obrigatórias)
-GROQ_API_KEY=sua_chave_groq
-GEMINI_API_KEY=sua_chave_gemini
-WHATSAPP_NUMBER=55999999999
-
-# APIs (opcionais)
-MAGISTERIUM_API_KEY=sua_chave
-GOOGLE_CREDENTIALS=base64_encoded_json
-CALENDAR_ID=seu@calendario.com
-
-# Config
-NODE_ENV=production
-TZ=America/Sao_Paulo
-```
-
-Veja `docs/CREDENTIALS.md` para instruções completas.
-
----
-
-## 📚 Documentação
-
-| Documento | Descrição |
-|-----------|-----------|
-| `docs/DIGITALOCEAN_SETUP.md` | **Passo a passo DigitalOcean** (LEIA PRIMEIRO!) |
-| `docs/WHATSAPP_PERSISTENCE.md` | Como manter sessão entre deploys |
-| `docs/BOTTLE_QUICK_START.md` | Como registrar água em ml |
-| `docs/BOTTLE_TRACKING.md` | Sistema completo de hidratação |
-| `docs/HYDRATION_REMINDERS.md` | Lembretes adaptativos |
-| `docs/HYDRATION_TIMELINE.md` | Exemplos de um dia |
-| `docs/SECURITY.md` | Boas práticas de segurança |
-| `docs/CREDENTIALS.md` | Configuração de credenciais |
+[![Status](https://img.shields.io/badge/Status-Production-brightgreen.svg)]()
 
 ---
 
 ## ✨ Funcionalidades
 
-### 💧 Rastreamento de Hidratação
-
-Registre consumo em ml direto:
-
-```
-Você: "bebi 250ml"
-Bot:  💧 Registrado! +250ml
-      Total: 250ml / 3000ml (8%)
-      Faltam: 2750ml
-
-Você: "troco 750"
-Bot:  ✅ Garrafa atualizada para 750ml!
-```
-
-**Recursos:**
-- ✅ Registra em ml direto
-- ✅ Aceita diferentes garrafas
-- ✅ Lembretes adaptativos por padrão
-- ✅ Histórico de consumo
-- ✅ Linguagem natural
-
-### 📅 Google Calendar
-
-Crie e consulte eventos:
-
-```
-/add evento Reunião amanhã 14h
-/list - Listar eventos
-/today - Eventos de hoje
-/delete - Remover evento
-```
+### 🧠 IA Multimodal
+- **Groq** — Raciocínio principal (GPT-OSS/LLaMA)
+- **Google Gemini** — Análise de imagens, áudio e visão computacional
+- **Magisterium AI** — Q&A sobre doutrina católica com fontes oficiais
+- **Perplexity** — Pesquisa web em tempo real
+- **RAG (Retrieval-Augmented Generation)** — Memória de longo prazo com LanceDB + embeddings
 
 ### 🎨 Geração de Imagens
-
 ```
-/imagem Uma montanha ao atardecer
+Você: "crie uma imagem de um pôr do sol na praia"
+Bot:  🎨 Imagem gerada com Flux-2-Klein-9b (1:1)
+      [imagem anexada]
 ```
+- **Cloudflare Workers AI** — Flux-2-Klein-9b (primário) + Flux-1-Schnell (fallback)
+- **Google Gemini** — Nano Banana como fallback final
+- Prompt enhancement automático (PT→EN + safety-aware via Groq)
+- Suporte a aspect ratios: `1:1`, `16:9`, `9:16`, `3:2`, `4:3`, etc.
 
-Usa Pollinations.AI (gratuito e ilimitado).
-
-### 🧠 Múltiplas IAs
-
-- **Groq (GPT-OSS-120b)** - Raciocínio principal
-- **Google Gemini** - Análise multimodal (imagens, áudio)
-- **Magisterium AI** - Q&A doutrina católica
-
-### ⛪ Magisterium AI
-
+### 💰 Controle Financeiro
 ```
-Você: "qual é a posição da Igreja sobre..."
-Bot:  ⛪ [resposta fundamentada]
+Você: "gastei 50 reais no almoço"
+Bot:  💸 Registrado! -R$ 50,00 (Alimentação)
+      📊 Saldo: R$ 1.450,00 | Gasto: R$ 550,00/R$ 2.000,00
+
+Você: "resumo financeiro"
+Bot:  📊 [relatório com gráficos por categoria]
 ```
+- Registro de despesas e receitas via linguagem natural
+- Categorização automática inteligente
+- Análise de necessidade (score 0-100)
+- Orçamento mensal e por categoria
+- Transações recorrentes
+- Exportação CSV e comparações mensais
+
+### 📅 Google Calendar
+```
+/add evento Reunião amanhã 14h
+/list          → Listar eventos
+/today         → Eventos de hoje
+/tomorrow      → Eventos de amanhã
+/week          → Eventos da semana
+/delete        → Remover evento
+```
+- Integração via Service Account (sem OAuth)
+- Lembretes automáticos antes de eventos
+- Notificações Pascom programadas
+
+### 🐍 Interpretador Python
+```
+Você: "faça um gráfico de barras com vendas por mês"
+Bot:  [executa Python + envia gráfico matplotlib]
+```
+- Execução segura com timeout de 30s
+- Detecção automática de gráficos matplotlib → envio como imagem
+- Suporte a qualquer biblioteca Python instalada
+
+### 🕷️ Crawler de Preços
+```
+Você: "monitora esse produto: [URL] alvo R$ 200"
+Bot:  ✅ Monitorando! Vou avisar quando cair para R$ 200
+
+[30 min depois]
+Bot:  🚨 ALERTA DE PREÇO! Caiu para R$ 189,90!
+```
+- Monitoramento automático a cada 30 minutos
+- Extração agnóstica de preços (meta tags, seletores comuns)
+- Suporte a Mercado Livre, Kabum, Amazon e outros
 
 ### 🎬 YouTube
-
 ```
 /resumir https://www.youtube.com/watch?v=xxx
 ```
+- Transcrição automática de vídeos
+- Resumo inteligente do conteúdo
 
-Transcreve e resume vídeos.
+### 📸 Processamento de Mídia
+- **Imagens** → Análise via Gemini Vision (describe, OCR, contexto)
+- **Áudios/PTT** → Transcrição automática para texto
+- **Vídeos** → Download e conversão com FFmpeg
 
----
+### ❄️ Controle de Ar-Condicionado
+- Integração com sistema IR local via Flask API
+- Controle de temperatura, modo, ventilação e swing
+- Status em tempo real de múltiplas unidades
 
-## 🏗️ Estrutura
-
+### ⛪ Magisterium AI
 ```
-.
-├── src/
-│   ├── index.js                  # Entry point
-│   ├── services/
-│   │   ├── api/                  # Integrações
-│   │   │   ├── groq.js
-│   │   │   ├── gemini.js
-│   │   │   ├── calendar.js
-│   │   │   ├── image-generator.js
-│   │   │   └── youtube.js
-│   │   ├── bot/
-│   │   │   ├── whatsapp.js
-│   │   │   └── message-handler.js
-│   │   ├── hydration-bottle.js
-│   │   ├── hydration-bottle-handlers.js
-│   │   ├── hydration-reminders.js
-│   │   ├── hydration-tracker.js
-│   │   ├── magisterium.js
-│   │   └── chat-history.js
-│   └── utils/
-│       ├── logger.js
-│       ├── health-check.js
-│       ├── resilience.js
-│       └── validator.js
-├── docs/                         # Documentação
-├── scripts/                      # Utilitários
-├── temp/                         # Cache
-├── Dockerfile
-├── .env.example
-├── package.json
-└── README.md
+Você: "qual é a posição da Igreja sobre eutanásia?"
+Bot:  ⛪ [resposta fundamentada com referências do magistério]
 ```
 
 ---
 
-## 🔧 Instalação Detalhada
+## 🏗️ Arquitetura
+
+```
+src/
+├── index.js                          # Entry point
+├── config/
+│   ├── index.js                      # Variáveis de ambiente
+│   └── system-prompt.js              # Personalidade do Jarvis
+├── patches/
+│   └── fix-sendseen.js               # Patch do whatsapp-web.js
+├── services/
+│   ├── api/
+│   │   ├── groq.js                   # LLM principal (Groq)
+│   │   ├── gemini.js                 # Visão + multimodal (Gemini)
+│   │   ├── calendar.js               # Google Calendar API
+│   │   ├── image-generator.js        # Cloudflare Flux + Nano Banana
+│   │   └── youtube.js                # Transcrição YouTube
+│   ├── bot/
+│   │   ├── whatsapp.js               # Cliente WhatsApp
+│   │   ├── whatsapp-auth-manager.js  # Gerenciamento de sessão
+│   │   ├── message-handler.js        # Roteamento de mensagens
+│   │   └── handlers/
+│   │       ├── ac-handler.js         # Ar-condicionado
+│   │       ├── calendar-handler.js   # Calendário
+│   │       ├── finance-handler.js    # Finanças
+│   │       ├── image-handler.js      # Geração de imagens
+│   │       ├── magisterium-handler.js# Doutrina católica
+│   │       ├── media-handler.js      # Imagens/áudio recebidos
+│   │       └── youtube-handler.js    # Resumo de vídeos
+│   ├── crawler/
+│   │   ├── price-watcher.js          # Monitoramento de preços
+│   │   └── watch-manager.js          # Persistência de watches
+│   ├── interpreter/
+│   │   └── python-executor.js        # Execução de código Python
+│   ├── jobs/
+│   │   ├── scheduler.js              # Agendador de tarefas
+│   │   └── pascom-notification.js    # Notificações Pascom
+│   ├── media/
+│   │   ├── converter.js              # Conversão de mídia (FFmpeg)
+│   │   └── downloader.js             # Download de mídia
+│   ├── rag/
+│   │   ├── rag-service.js            # RAG service (Node.js)
+│   │   ├── rag_db.py                 # Vector DB (Python/LanceDB)
+│   │   ├── cleanup_memories.py       # Limpeza de memórias
+│   │   └── migrate_model.py          # Migração de modelo
+│   ├── chat-history.js               # Histórico de conversas
+│   ├── finance-tracker.js            # Sistema financeiro
+│   ├── finance-api.js                # API de finanças
+│   ├── magisterium.js                # Magisterium AI client
+│   ├── acService.js                  # AC IR controller
+│   └── reminders.js                  # Lembretes de eventos
+└── utils/
+    ├── cache.js                      # Cache em memória
+    ├── ffmpeg-path.js                # Detecção do FFmpeg
+    ├── health-check.js               # Health endpoint (:3000)
+    ├── image-processor.js            # Compressão de imagens
+    ├── logger.js                     # Logging estruturado
+    ├── message-queue.js              # Fila de mensagens
+    ├── resilience.js                 # Retry + circuit breaker
+    ├── temp-manager.js               # Limpeza de temporários
+    └── validator.js                  # Validação de entrada
+```
+
+---
+
+## 🚀 Quick Start
 
 ### 1. Pré-requisitos
 
-- Node.js 18+
-- npm ou yarn
-- Docker (opcional, para deployment)
+- **Node.js 18+**
+- **Python 3.8+** (para RAG e interpretador)
+- **FFmpeg** (opcional, para processamento de mídia)
 
-### 2. Clone e Configure
+### 2. Instalação
 
 ```bash
 git clone https://github.com/geohonorato/jarvis-whatsapp-bot.git
 cd jarvis-whatsapp-bot
 npm install
+pip install -r requirements.txt  # Para RAG/Python
 ```
 
-### 3. Variáveis de Ambiente
+### 3. Configuração
 
-```bash
-cp .env.example .env
-# Edite com suas chaves
+Crie o arquivo `.env` na raiz:
+
+```env
+# === APIs Obrigatórias ===
+GROQ_API_KEY=sua_chave_groq
+GEMINI_API_KEY=sua_chave_gemini
+WHATSAPP_NUMBER=559199999999@c.us
+
+# === Geração de Imagens (Cloudflare) ===
+CF_ACCOUNT_ID=seu_account_id
+CF_API_TOKEN=seu_api_token
+
+# === Google Calendar ===
+CALENDAR_ID=seu@calendario.com
+# + arquivo data/credentials.json (Service Account)
+
+# === APIs Opcionais ===
+MAGISTERIUM_API_KEY=sua_chave        # Doutrina católica
+PERPLEXITY_API_KEY=sua_chave         # Pesquisa web
+
+# === Config ===
+MAX_HISTORY_MESSAGES=20
 ```
 
-### 4. Inicie
+### 4. Execute
 
 ```bash
 npm start
 ```
 
-Abra seu navegador em `http://localhost:3000` para ver o QR code do WhatsApp.
+Escaneie o QR code que aparecerá no terminal para conectar ao WhatsApp.
 
 ---
 
-## 🎮 Comandos Principais
+## 🎮 Comandos
 
-### Hidratação
+| Comando | Descrição |
+|---------|-----------|
+| `/imagem [texto]` | Gera imagem com IA |
+| `/add evento [descrição]` | Cria evento no calendário |
+| `/list` | Lista próximos eventos |
+| `/today` `/tomorrow` `/week` | Eventos filtrados |
+| `/delete` | Remove evento |
+| `/resumir [URL YouTube]` | Resume vídeo |
+| `/limpar` | Limpa histórico do chat |
+| `ajuda` | Lista todos os comandos |
 
-```
-250ml              Registra 250ml
-bebi 500           Registra 500ml
-1L                 Registra 1 litro (1000ml)
-troco 750          Troca garrafa para 750ml
-status             Mostra progresso
-relatório          Mostra análise
-/pausar            Pausa lembretes
-/retomar           Retoma lembretes
-```
-
-### Calendário
-
-```
-/add evento ...    Criar evento
-/list              Listar eventos
-/today             Eventos hoje
-/tomorrow          Eventos amanhã
-/week              Eventos semana
-/delete            Remover evento
-```
-
-### Geral
-
-```
-/resumir [URL]     Resumir vídeo YouTube
-/imagem texto      Gerar imagem
-/limpar            Limpar histórico
-ajuda              Listar comandos
-```
+### Linguagem Natural (sem comando)
+- `"gastei 30 no uber"` → Registra despesa
+- `"recebi 2000 de salário"` → Registra receita
+- `"resumo financeiro"` → Relatório mensal
+- `"monitora [URL] alvo R$ 100"` → Crawler de preço
+- Enviar **imagem** → Análise com Gemini Vision
+- Enviar **áudio** → Transcrição automática
+- Perguntas gerais → Resposta via Groq + RAG
 
 ---
 
-## 🚀 Deployment
+## 🔌 Integrações
 
-### DigitalOcean (Recomendado)
+| Serviço | Uso | Tipo |
+|---------|-----|------|
+| **Groq** | LLM principal (raciocínio) | Obrigatório |
+| **Google Gemini** | Visão, áudio, multimodal | Obrigatório |
+| **Cloudflare Workers AI** | Geração de imagens (Flux) | Opcional |
+| **Google Calendar** | Agenda e lembretes | Opcional |
+| **Perplexity** | Pesquisa web real-time | Opcional |
+| **Magisterium** | Doutrina católica | Opcional |
+| **LanceDB** | RAG / memória vetorial | Automático |
+| **Python** | Interpretador + gráficos | Opcional |
+
+---
+
+## 🚢 Deploy
+
+### OCI ARM (Oracle Cloud — Gratuito)
 
 ```bash
-# Push para GitHub ativa auto-deploy
-git push origin main
+# Cloud-init automático
+bash deploy/cloud-init-oci-arm.sh
 ```
 
-### Docker
+Script `deploy/auto-update.sh` para atualizações automáticas via git pull.
+
+### Manual (VPS qualquer)
 
 ```bash
-docker build -t jarvis-bot .
-docker run -e GROQ_API_KEY=xxx -e GEMINI_API_KEY=xxx jarvis-bot
+# Clone, instale e configure .env
+npm install --production
+npm start
 ```
 
 ### Variáveis de Deploy
 
-Adicione no painel do provedor:
-- `GROQ_API_KEY`
-- `GEMINI_API_KEY`
-- `GOOGLE_CREDENTIALS`
-- `MAGISTERIUM_API_KEY`
-- `CALENDAR_ID`
-- `WHATSAPP_NUMBER`
-- `NODE_ENV=production`
-- `TZ=America/Sao_Paulo`
+```env
+GROQ_API_KEY=xxx
+GEMINI_API_KEY=xxx
+CF_ACCOUNT_ID=xxx
+CF_API_TOKEN=xxx
+CALENDAR_ID=xxx
+WHATSAPP_NUMBER=xxx
+NODE_ENV=production
+TZ=America/Sao_Paulo
+```
 
 ---
 
 ## 📊 Monitoramento
 
-- Health check: `GET http://localhost:3000`
-- Logs estruturados em stdout
-- Heartbeat a cada 30s
-- Métricas de uptime
+- **Health check**: `GET http://localhost:3000`
+- **Heartbeat**: A cada 30s no console
+- **Uptime e memória**: Monitorados automaticamente
+- **Limpeza automática**: Temporários e histórico de chat
 
 ---
 
 ## 🔐 Segurança
 
-- ✅ Credenciais em variáveis de ambiente
-- ✅ Sem hardcoding de senhas
-- ✅ Validação de entrada
-- ✅ Sanitização de dados
-- ✅ Error handling robusto
-
-Veja `docs/SECURITY.md` para mais detalhes.
-
----
-
-## 🧪 Testes
-
-```bash
-# Testes (em breve)
-npm test
-```
-
----
-
-## 🆘 Troubleshooting
-
-### Bot não conecta ao WhatsApp
-1. Limpe cache: `npm run clean-cache`
-2. Escaneie QR code novamente
-3. Verifique WhatsApp Web no navegador
-
-### Erro de credenciais
-1. Veja `docs/CREDENTIALS.md`
-2. Valide variáveis em `.env`
-3. Codifique base64 se necessário
-
-### Lembretes não funcionam
-1. Comande `/status` para diagnosticar
-2. Veja `docs/HYDRATION_REMINDERS.md`
-
-### Imagens não geram
-1. Verifique internet
-2. Tente outro modelo: `/imagem [model] texto`
+- ✅ Credenciais em variáveis de ambiente (`.env`)
+- ✅ Filtro de mensagens de newsletters/canais
+- ✅ Validação e sanitização de entrada
+- ✅ Timeout em execução de código Python (30s)
+- ✅ Error handling robusto com circuit breaker
+- ✅ Rate limiting na fila de mensagens
+- ✅ Patch automático do `sendSeen` (whatsapp-web.js)
 
 ---
 
 ## 📦 Dependências Principais
 
-- `whatsapp-web.js` - Cliente WhatsApp
-- `@google-cloud/client-libraries` - Google APIs
-- `axios` - HTTP client
-- `dotenv` - Variáveis de ambiente
-- `express` - Health server
-- `puppeteer-core` - Headless browser
+| Pacote | Função |
+|--------|--------|
+| `whatsapp-web.js` | Cliente WhatsApp Web |
+| `axios` | HTTP client |
+| `googleapis` | Google Calendar API |
+| `@google/generative-ai` | Gemini SDK |
+| `cheerio` | Web scraping (crawler) |
+| `@distube/ytdl-core` | Download YouTube |
+| `fluent-ffmpeg` | Processamento de mídia |
+| `magisterium` | Doutrina católica |
+| `dotenv` | Variáveis de ambiente |
+| `form-data` | Multipart requests (Flux-2) |
 
 ---
 
@@ -339,38 +342,20 @@ npm test
 
 ---
 
-## 📝 Licença
-
-MIT License - veja LICENSE.md
-
----
-
 ## 👤 Autor
 
 **Geovanni Honorato**
 - GitHub: [@geohonorato](https://github.com/geohonorato)
 - Email: geohonorato234@gmail.com
-- Instagram: @geovannihonorato
 
 ---
 
-## 🙏 Agradecimentos
+## 📝 Licença
 
-- Groq pelo GPT-OSS
-- Google pela Gemini API
-- WhatsApp Web pelo protocolo reverso
-- Comunidade Node.js
+MIT License — veja [LICENSE](LICENSE)
 
 ---
 
-## 📞 Suporte
-
-- 📧 [Issues no GitHub](https://github.com/geohonorato/jarvis-whatsapp-bot/issues)
-- 💬 [Discussões](https://github.com/geohonorato/jarvis-whatsapp-bot/discussions)
-- 📖 [Documentação](docs/)
-
----
-
-**Status**: ✅ Production Ready  
-**Última Atualização**: Nov 2025  
+**Status**: ✅ Production Ready
+**Última Atualização**: Fev 2026
 **Versão**: 1.0.0
