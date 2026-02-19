@@ -43,6 +43,22 @@ Bot:  📊 [relatório com gráficos por categoria]
 - Orçamento mensal e por categoria
 - Transações recorrentes
 - Exportação CSV e comparações mensais
+- 📅 **Job mensal automático** — No dia 1 de cada mês às 9h, o bot pede extrato e fatura para análise
+
+### 📄 Análise de Documentos (PDF)
+```
+Você: [envia fatura-nubank-jan.pdf]
+Bot:  📄 Analisando fatura-nubank-jan.pdf (1.2MB)...
+      📊 RESUMO: Total R$ 2.340,00
+      📂 Alimentação: R$ 890 (38%)
+      📂 Assinaturas: R$ 210 (9%)
+      💡 Dicas: reduzir delivery em 30% economiza R$ 267/mês
+```
+- Leitura nativa de PDFs e planilhas via Gemini Vision
+- Detecta automaticamente extratos e faturas bancárias
+- Análise financeira completa: categorias, top gastos, recorrências, alertas
+- Dicas de economia personalizadas
+- Limite: ~19MB por documento
 
 ### 📅 Google Calendar
 ```
@@ -88,6 +104,7 @@ Bot:  🚨 ALERTA DE PREÇO! Caiu para R$ 189,90!
 ### 📸 Processamento de Mídia
 - **Imagens** → Análise via Gemini Vision (describe, OCR, contexto)
 - **Áudios/PTT** → Transcrição automática para texto
+- **PDFs** → Análise de documentos e extratos financeiros
 - **Vídeos** → Download e conversão com FFmpeg
 
 ### ❄️ Controle de Ar-Condicionado
@@ -139,6 +156,7 @@ src/
 │   │   └── python-executor.js        # Execução de código Python
 │   ├── jobs/
 │   │   ├── scheduler.js              # Agendador de tarefas
+│   │   ├── monthly-finance-job.js    # Análise financeira mensal
 │   │   └── pascom-notification.js    # Notificações Pascom
 │   ├── media/
 │   │   ├── converter.js              # Conversão de mídia (FFmpeg)
