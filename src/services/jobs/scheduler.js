@@ -1,6 +1,8 @@
 const { checkPrices } = require('../crawler/price-watcher');
+const { verificarAnaliseFinanceiraMensal } = require('./monthly-finance-job');
 
 let jobsInterval = null;
+let monthlyInterval = null;
 
 /**
  * Inicia os Jobs agendados (Crawler, Lembretes, etc)
@@ -12,15 +14,23 @@ function iniciarScheduler(client) {
         return;
     }
 
-    console.log('⏰ Scheduler iniciado: Crawler de Preços (30min)');
+    console.log('⏰ Scheduler iniciado: Crawler de Preços (30min) + Análise Financeira Mensal');
 
     // Executa imediatamente uma vez
     runJobs(client);
 
-    // Configura intervalo de 30 minutos
+    // Configura intervalo de 30 minutos para crawler
     jobsInterval = setInterval(() => {
         runJobs(client);
     }, 30 * 60 * 1000);
+
+    // Verifica job mensal a cada minuto
+    monthlyInterval = setInterval(() => {
+        verificarAnaliseFinanceiraMensal(client);
+    }, 60 * 1000);
+
+    // Verifica job mensal imediatamente
+    verificarAnaliseFinanceiraMensal(client);
 }
 
 async function runJobs(client) {
@@ -42,3 +52,4 @@ async function runJobs(client) {
 }
 
 module.exports = { iniciarScheduler };
+
