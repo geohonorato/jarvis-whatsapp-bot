@@ -158,9 +158,21 @@ async function syncOpenFinance(whatsappClient, telefoneDestino) {
 
                 addedCount++;
 
-                // Lógica de alerta proativo: Se o gasto for "Supérfluo" ou "Evitável" (necessidade alta/piora score)
-                if (result.gastosEvitaveisStatus === 'ruim' || classificada.necessidade === 'Supérfluo') {
-                    warningMessages.push(`🚨 *Alerta de Gasto Evitável!*\nVocê acabou de gastar ${formatCurrency(valorAbsoluto)} em _${trx.description}_ (${classificada.categoria}).\nCuidado com o limite!`);
+                // Lógica de alerta proativo com SERMÃO INTELIGENTE se for Supérfluo ou Dispensável
+                if (result.gastosEvitaveisStatus === 'ruim' || classificada.necessidade === 'Supérfluo' || classificada.necessidade === 'Dispensável') {
+                    console.log(`🔥 Gasto supérfluo detectado na nuvem: ${trx.description}. Solicitando sermão do Groq...`);
+                    const promptSermao = `O usuário Geovanni (seu criador/chefe) acabou de fazer um gasto classificado como "Supérfluo/Evitável".
+Detalhes: Gasto de R$ ${valorAbsoluto} com "${trx.description}" (Categoria: ${classificada.categoria}).
+Sua missão como Jarvis (assistente irônico, sarcástico e extremamente rigoroso com as finanças dele) é dar um Puxão de Orelha. 
+Humilhe a atitude dele de gastar com bobagem. Dê um sermão, bata nele moralmente por torrar dinheiro enquanto devia economizar. Use humor ácido, seja julgador.
+Máximo de 4-5 frases curtas. Formate em texto de WhatsApp (asterisco para negrito e underline para itálico, NUNCA use markdown **).`;
+
+                    try {
+                        const sermao = await groqApi.processarComGroq([{ text: promptSermao }]);
+                        warningMessages.push(`🚨 *FISCAL JARVIS - GASTO SUPÉRFLUO!* 🚨\n\n${sermao}`);
+                    } catch (e) {
+                        warningMessages.push(`🚨 *Alerta de Gasto Evitável!*\nVocê acabou de gastar ${formatCurrency(valorAbsoluto)} em _${trx.description}_ (${classificada.categoria}).\nCuidado com o limite!`);
+                    }
                 }
 
                 if (result.orcamento && result.orcamento.percentage >= 90 && !limitExceeded) {

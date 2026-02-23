@@ -1,3 +1,12 @@
 {
-  "pending": []
+  "pending": [
+    {
+      "id": "17718103801915h0kiah",
+      "amount": 150,
+      "description": "Pix Enviado Joana",
+      "date": "2026-02-23",
+      "originalCategory": "Transferências",
+      "addedAt": "2026-02-23T01:33:00.191Z"
+    }
+  ]
 }

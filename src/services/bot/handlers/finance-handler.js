@@ -225,6 +225,21 @@ Retorne APENAS um JSON válido neste formato exato (sem crases Markdown, sem tex
 
         let msgRetorno = `✅ *Despesa classificada e salva!*\n\n• Valor: ${formatarMoeda(pendingItem.amount)}\n• Categoria: *${categoriaFinal}*\n• Descrição: _${descricaoFinal}_\n\n(Score de Necessidade: ${necessidadeFinal})`;
 
+        if (necessidadeFinal === 'Supérfluo' || necessidadeFinal === 'Dispensável') {
+            const promptSermao = `O usuário Geovanni (seu criador/chefe) justificou um gasto genérico que você acabou de classificar como "Supérfluo/Evitável".
+A desculpa/justificativa dele foi: "${textoUsuario}".
+E os detalhes reais da compra foram: R$ ${pendingItem.amount} em "${descricaoFinal}" (Categoria: ${categoriaFinal}).
+Sua missão como Jarvis (assistente irônico, sarcástico e rigoroso com as finanças dele) é dar um Puxão de Orelha sobre essa resposta. 
+Humilhe a desculpa esfarrapada dele e a atitude de gastar com bobagem. Dê um sermão digno de um pai decepcionado, mas com humor ácido. Use emojis.
+Máximo de 4-5 frases. Formate em texto de WhatsApp (asterisco para negrito e underline para itálico, NUNCA use markdown **).`;
+            try {
+                const sermao = await processarComGroq([{ text: promptSermao }]);
+                msgRetorno += `\n\n🚨 *FISCAL JARVIS ATIVADO:* 🚨\n\n${sermao}`;
+            } catch (e) {
+                console.error("Erro ao gerar sermão no pending handler:", e);
+            }
+        }
+
         if (result.orcamento && result.orcamento.percentage >= 90) {
             msgRetorno += `\n\n⚠️ *Atenção:* O orçamento de ${categoriaFinal} já está em ${result.orcamento.percentage}%!`;
         }
