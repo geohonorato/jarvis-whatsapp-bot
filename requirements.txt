@@ -2,3 +2,4 @@ lancedb
 sentence-transformers
 pandas
 numpy
+yt-dlp

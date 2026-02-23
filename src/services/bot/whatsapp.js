@@ -7,6 +7,7 @@ const { iniciarVerificacaoLembretes } = require('../reminders');
 const { iniciarJobPascom } = require('../jobs/pascom-notification');
 const { iniciarScheduler } = require('../jobs/scheduler');
 const { handleMessage } = require('./message-handler');
+const { schedulePluggySync } = require('../jobs/pluggy-sync-job');
 
 let qrGerado = false;
 let tentativasReconexao = 0;
@@ -133,6 +134,7 @@ client.on('ready', () => {
     iniciarVerificacaoLembretes(client);
     iniciarJobPascom(client);
     iniciarScheduler(client);
+    schedulePluggySync(client);
 
     // Inicializa RAG (Eager Loading) para evitar delay na primeira mensagem
     const ragService = require('../rag/rag-service');

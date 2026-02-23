@@ -89,6 +89,17 @@ async function handleMessage(msg, client) {
         // --- Processamento de Texto ---
         if (hasText) {
             console.log('\n📩 Mensagem de texto recebida:', msg.body);
+
+            // --- Verificação de Transações Pendentes (Human-in-the-Loop) ---
+            const pendingTransactions = require('./handlers/pending-transactions');
+            const hasPending = pendingTransactions.getPendingCount() > 0;
+
+            if (hasPending) {
+                const { handlePendingTransactionReply } = require('./handlers/finance-handler');
+                const handled = await handlePendingTransactionReply(client, chatId, msg.body, pendingTransactions);
+                if (handled) return; // Se foi tratado como resposta financeira, encerra o ciclo
+            }
+
             const partsEntrada = [{ text: msg.body }];
             adicionarAoHistorico(chatId, 'user', partsEntrada);
             await processarMensagemTexto(client, partsEntrada, chatId);
@@ -453,6 +464,83 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
                 }
             }
 
+            // 5. Integração Notion
+            // Regex: <NOTION>...</NOTION>
+            const notionRegex = /<NOTION>([\s\S]*?)<\/NOTION>/i;
+            const notionMatch = respostaIA.match(notionRegex);
+            if (notionMatch) {
+                const notionContent = notionMatch[1].trim();
+                respostaFinal = respostaFinal.replace(notionRegex, '').trim();
+
+                try {
+                    const notionData = JSON.parse(notionContent);
+                    const notionApi = require('../api/notion');
+
+                    if (!notionApi.isReady()) {
+                        await client.sendMessage(chatId, '⚠️ Chave do Notion não configurada.');
+                    } else {
+                        await client.sendMessage(chatId, '⏳ *Acessando Notion...*');
+                        let result;
+
+                        switch (notionData.action) {
+                            case 'search':
+                                result = await notionApi.search(notionData.query);
+                                break;
+                            case 'create_page':
+                                result = await notionApi.createPage(notionData.databaseId, notionData.title, notionData.properties);
+                                break;
+                            case 'append_blocks':
+                                result = await notionApi.appendBlocks(notionData.pageId, notionData.children);
+                                break;
+                            case 'query_db':
+                                result = await notionApi.queryDatabase(notionData.databaseId, notionData.filter, notionData.sorts);
+                                break;
+                            default:
+                                throw new Error('Ação Notion desconhecida: ' + notionData.action);
+                        }
+
+                        if (result.success) {
+                            let msgRetorno = '✅ *Ação no Notion concluída com sucesso!*';
+
+                            // Se for operação de leitura, pedimos para a IA resumir os dados brutos
+                            if (notionData.action === 'search' || notionData.action === 'query_db') {
+                                // Simplifica os dados para caber no limite de tokens do LLM
+                                const simplifiedData = result.data.map(item => {
+                                    let title = 'Documento';
+                                    if (item.properties) {
+                                        for (const key in item.properties) {
+                                            if (item.properties[key] && item.properties[key].type === 'title') {
+                                                const t = item.properties[key].title;
+                                                if (t && t.length > 0) title = t.map(x => x.plain_text).join('');
+                                            }
+                                        }
+                                    }
+                                    return {
+                                        title: title,
+                                        url: item.url,
+                                        content: item.extracted_content || '(Apenas link, sem conteúdo extraído)'
+                                    };
+                                });
+
+                                const payloadText = JSON.stringify(simplifiedData).substring(0, 4000);
+                                const promptResumo = [
+                                    { text: `O usuário perguntou/pediu: "${textoUsuario}".\n\nO sistema buscou no banco de dados do Notion e retornou o seguinte contexto (blocos de texto):\n${payloadText}\n\nAnalise o "content" retornado e responda detalhadamente o pedido do usuário usando EXCLUSIVAMENTE essas informações. Fale de forma natural e amigável, como um assistente no WhatsApp.\n\nREGRAS RÍGIDAS DE FORMATAÇÃO (WHATSAPP):\n- Use APENAS *texto* para negrito (NUNCA use **texto**)\n- Use APENAS _texto_ para itálico\n- NUNCA use cabeçalhos como #, ## ou ###\n- NUNCA use tabelas (| Nome | Valor |), converta-as para listas em texto puro\n- Use emojis e listas simples (com o caractere •)\n- Se a resposta completa não estiver no "content", informe com simpatia o que você conseguiu achar.` }
+                                ];
+                                const { processarMensagemMultimodal } = require('../api/groq');
+                                const resumoIA = await processarMensagemMultimodal(promptResumo);
+                                msgRetorno = `✅ *Notion:*\n\n${resumoIA}`;
+                            }
+
+                            await client.sendMessage(chatId, msgRetorno);
+                        } else {
+                            await client.sendMessage(chatId, `❌ Erro no Notion: ${result.error}`);
+                        }
+                    }
+                } catch (err) {
+                    await client.sendMessage(chatId, `❌ Falha ao processar comando Notion: ${err.message}`);
+                }
+            }
+
             const partsResposta = [{ text: respostaFinal }];
 
             // Roteamento de comandos gerados pela IA
@@ -505,8 +593,10 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
             }
 
             // Texto normal — envia direto
-            console.log('🤖 Resposta enviada:', respostaFinal);
-            await client.sendMessage(chatId, respostaFinal);
+            if (respostaFinal && respostaFinal.trim().length > 0) {
+                console.log('🤖 Resposta enviada:', respostaFinal);
+                await client.sendMessage(chatId, respostaFinal);
+            }
         }
 
         // Se não houve resposta válida

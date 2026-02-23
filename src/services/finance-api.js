@@ -22,7 +22,7 @@ function registrarDespesa(userId, valor, categoria, descricao = '') {
     try {
         const tracker = getOrCreateTracker(userId);
         const resultado = tracker.addExpense(valor, categoria, descricao, 'ia');
-        
+
         if (resultado.error) {
             return { erro: true, mensagem: resultado.error };
         }
@@ -52,7 +52,7 @@ function registrarReceita(userId, valor, categoria = 'Receita', descricao = '') 
     try {
         const tracker = getOrCreateTracker(userId);
         const resultado = tracker.addIncome(valor, categoria, descricao, 'ia');
-        
+
         if (resultado.error) {
             return { erro: true, mensagem: resultado.error };
         }
@@ -78,7 +78,7 @@ function obterResumoFinanceiro(userId) {
     try {
         const tracker = getOrCreateTracker(userId);
         const resumo = tracker.getMonthSummary();
-        
+
         return {
             mes: resumo.month,
             despesas: resumo.totalExpenses,
@@ -106,7 +106,7 @@ function obterUltimasTransacoes(userId, limite = 10) {
     try {
         const tracker = getOrCreateTracker(userId);
         const transacoes = tracker.getRecentTransactions(limite);
-        
+
         return {
             sucesso: true,
             quantidade: transacoes.length,
@@ -131,7 +131,7 @@ function definirOrcamento(userId, valor) {
     try {
         const tracker = getOrCreateTracker(userId);
         const resultado = tracker.setMonthlyBudget(valor);
-        
+
         if (resultado.error) {
             return { erro: true, mensagem: resultado.error };
         }
@@ -154,7 +154,7 @@ function obterComparacao(userId) {
     try {
         const tracker = getOrCreateTracker(userId);
         const comparacao = tracker.getComparison();
-        
+
         if (comparacao.error) {
             return { erro: true, mensagem: comparacao.error };
         }
@@ -180,7 +180,7 @@ function exportarDados(userId) {
     try {
         const tracker = getOrCreateTracker(userId);
         const csv = tracker.exportToCSV();
-        
+
         return {
             sucesso: true,
             dados: csv,
@@ -192,6 +192,45 @@ function exportarDados(userId) {
     }
 }
 
+/**
+ * Importa transações de extrato/fatura
+ */
+function importarExtrato(userId, transactions, source = 'extrato') {
+    try {
+        const tracker = getOrCreateTracker(userId);
+        const resultado = tracker.importTransactions(transactions, source);
+
+        if (resultado.error) {
+            return { erro: true, mensagem: resultado.error };
+        }
+
+        return {
+            sucesso: true,
+            importadas: resultado.imported,
+            duplicatas: resultado.duplicates,
+            totalDespesas: resultado.totalExpenses,
+            totalReceitas: resultado.totalIncome,
+            resumo: resultado.summary
+        };
+    } catch (error) {
+        console.error('❌ Erro ao importar extrato:', error.message);
+        return { erro: true, mensagem: error.message };
+    }
+}
+
+/**
+ * Obtém dados para geração de gráficos
+ */
+function obterDadosGrafico(userId) {
+    try {
+        const tracker = getOrCreateTracker(userId);
+        return tracker.generateChartData();
+    } catch (error) {
+        console.error('❌ Erro ao obter dados de gráfico:', error.message);
+        return null;
+    }
+}
+
 module.exports = {
     registrarDespesa,
     registrarReceita,
@@ -200,5 +239,8 @@ module.exports = {
     definirOrcamento,
     obterComparacao,
     exportarDados,
+    importarExtrato,
+    obterDadosGrafico,
     getOrCreateTracker
 };
+

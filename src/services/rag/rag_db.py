@@ -9,7 +9,7 @@ import os
 
 # --- CONFIGURAÇÃO ---
 DB_PATH = "data/lancedb"
-MODEL_NAME = "sentence-transformers/all-mpnet-base-v2"
+MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 TABLE_NAME = "memories"
 
 # Configuração de saída UTF-8 para o Node.js ler corretamente

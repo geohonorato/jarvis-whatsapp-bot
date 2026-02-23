@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Configuração do Groq para extração de memória (lightweight)
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const MEMORY_EXTRACTOR_MODEL = 'llama-3.1-8b-instant'; // Modelo rápido e barato
+const MEMORY_EXTRACTOR_MODEL = process.env.MEMORY_MODEL || 'llama-3.1-8b-instant'; // Permite substituição no .env
 
 class RagService {
     constructor() {
@@ -13,6 +13,7 @@ class RagService {
         this.readLineInterface = null;
         this.pendingRequests = [];
         this.commandQueue = [];
+        this.semanticCache = new Map(); // Cache em RAM para pesquisas repetidas
         this.isReady = false;
 
         // Configurações de busca dinâmica
@@ -131,30 +132,94 @@ class RagService {
     }
 
     /**
-     * Busca contexto DINÂMICO — filtra por score de similaridade.
-     * Retorna de 0 a MAX_RESULTS memórias, dependendo da relevância.
+     * Busca contexto DINÂMICO HÍBRIDO — Busca no LanceDB e no Notion paralelamente.
      */
     async buscarContexto(query) {
+        // 1. Verifica o Cache Semântico (RAM)
+        const cacheKey = query.toLowerCase().trim();
+        if (this.semanticCache.has(cacheKey)) {
+            console.log(`⚡ [RAG CACHE HIT] Retornando memória instântanea para: "${cacheKey.substring(0, 30)}..."`);
+            return this.semanticCache.get(cacheKey);
+        }
+
         try {
-            const res = await this.sendCommand('search', { query, limit: this.SEARCH_LIMIT });
+            const notionApi = require('../api/notion');
+
+            // Dispara a busca local
+            const pLocal = this.sendCommand('search', { query, limit: this.SEARCH_LIMIT });
+
+            // Dispara a busca no Notion COM TIMEOUT de 1.5s
+            const pNotion = notionApi.isReady() ? notionApi.search(query) : Promise.resolve({ success: false, data: [] });
+            const pNotionWithTimeout = Promise.race([
+                pNotion,
+                new Promise(resolve => setTimeout(() => resolve({ success: false, timeout: true }), 1500))
+            ]);
+
+            const [res, notionRes] = await Promise.all([pLocal, pNotionWithTimeout]);
+
+            if (notionRes.timeout) {
+                console.log('⏳ Busca no Notion excedeu 1.5s. Ignorando Notion para manter o bot rápido.');
+            }
+
+            let relevant = [];
+
+            // 1. Processa DB Local Vetorial (LanceDB)
             if (res.status === 'success' && res.data) {
-                // Filtra por threshold de distância (menor = mais similar)
-                const relevant = res.data
+                relevant = res.data
                     .filter(doc => doc._distance < this.DISTANCE_THRESHOLD)
                     .slice(0, this.MAX_RESULTS);
 
                 if (relevant.length > 0) {
-                    console.log(`🧠 Memórias relevantes: ${relevant.length}/${res.data.length} (threshold: ${this.DISTANCE_THRESHOLD})`);
-                    relevant.forEach((doc, i) => {
-                        console.log(`   ${i + 1}. [dist=${doc._distance.toFixed(3)}] ${doc.text.substring(0, 60)}...`);
+                    console.log(`🧠 Memórias locais relevantes: ${relevant.length}/${res.data.length} (threshold: ${this.DISTANCE_THRESHOLD})`);
+                }
+            }
+
+            // 2. Processa Notion (Conhecimento Externo)
+            if (notionRes.success && notionRes.data && notionRes.data.length > 0) {
+                const notionItems = notionRes.data.filter(item => item.extracted_content).slice(0, 2);
+
+                if (notionItems.length > 0) {
+                    console.log(`📓 Memórias do Notion encontradas e integradas: ${notionItems.length}`);
+
+                    notionItems.forEach(item => {
+                        let title = 'Documento Notion';
+                        if (item.properties) {
+                            for (const key in item.properties) {
+                                if (item.properties[key] && item.properties[key].type === 'title') {
+                                    const t = item.properties[key].title;
+                                    if (t && t.length > 0) title = t.map(x => x.plain_text).join('');
+                                }
+                            }
+                        }
+
+                        // Limita o conteúdo do Notion para ~1500 chars para o RAG não estourar o limite de tokens da conversa geral
+                        const truncatedContent = item.extracted_content.substring(0, 1500);
+
+                        // Fake-doc formatado como se fosse o LanceDB
+                        relevant.push({
+                            text: `[FONTE EXTERNA: Notion - ${title}]\n${truncatedContent}...`,
+                            metadata: JSON.stringify({ source: 'notion', url: item.url }),
+                            _distance: 0.1 // Score arbitrário forte
+                        });
                     });
                 }
-
-                return relevant;
             }
-            return [];
+
+            // Log de depuração final
+            if (relevant.length > 0) {
+                relevant.forEach((doc, i) => {
+                    const distStr = doc._distance !== undefined ? doc._distance.toFixed(3) : 'notn';
+                    console.log(`   ${i + 1}. [dist=${distStr}] ${doc.text.substring(0, 70).replace(/\\n/g, ' ')}...`);
+                });
+            }
+
+            // 3. Salva no Cache Semântico (expira se passar de 100 itens pra não estourar RAM)
+            if (this.semanticCache.size > 100) this.semanticCache.clear();
+            this.semanticCache.set(cacheKey, relevant);
+
+            return relevant;
         } catch (e) {
-            console.error('❌ Erro buscarContexto:', e);
+            console.error('❌ Erro buscarContexto Híbrido:', e);
             return [];
         }
     }

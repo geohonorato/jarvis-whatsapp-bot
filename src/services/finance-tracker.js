@@ -12,7 +12,7 @@ class FinanceTracker {
         this.dataDir = path.join(__dirname, '../../temp', 'finance-data');
         this.dataFile = path.join(this.dataDir, `${userId}-finance.json`);
         this.configFile = path.join(this.dataDir, `${userId}-finance-config.json`);
-        
+
         // Criar diretório se não existir
         if (!fs.existsSync(this.dataDir)) {
             fs.mkdirSync(this.dataDir, { recursive: true });
@@ -94,7 +94,7 @@ class FinanceTracker {
 
             if (fs.existsSync(this.dataFile)) {
                 const savedData = JSON.parse(fs.readFileSync(this.dataFile, 'utf8'));
-                
+
                 // Se é um novo mês, arquiva dados antigos
                 const currentMonth = new Date().toISOString().slice(0, 7);
                 if (savedData.currentMonth !== currentMonth) {
@@ -156,7 +156,7 @@ class FinanceTracker {
         for (const [level, data] of Object.entries(this.necessityMap)) {
             const hasKeyword = data.keywords.some(keyword => descLower.includes(keyword));
             const isCategory = data.categories.includes(category);
-            
+
             if (hasKeyword || isCategory) {
                 if (data.baseScore > maxScore) {
                     maxScore = data.baseScore;
@@ -368,14 +368,14 @@ class FinanceTracker {
         // Calcula percentuais
         for (const level in necessityAnalysis) {
             necessityAnalysis[level].amount = parseFloat(necessityAnalysis[level].amount.toFixed(2));
-            necessityAnalysis[level].percentage = expenses > 0 
+            necessityAnalysis[level].percentage = expenses > 0
                 ? parseFloat(((necessityAnalysis[level].amount / expenses) * 100).toFixed(1))
                 : 0;
         }
 
         // Gastos evitáveis (dispensável + supérfluo)
         const avoidableExpenses = necessityAnalysis.dispensable.amount + necessityAnalysis.superfluous.amount;
-        const avoidablePercentage = expenses > 0 
+        const avoidablePercentage = expenses > 0
             ? parseFloat(((avoidableExpenses / expenses) * 100).toFixed(1))
             : 0;
 
@@ -486,8 +486,8 @@ class FinanceTracker {
 
         for (const recurring of this.data.recurringTransactions) {
             // Verifica se já foi processada este mês
-            const alreadyProcessed = this.data.transactions.some(t => 
-                t.source === 'recurring' && 
+            const alreadyProcessed = this.data.transactions.some(t =>
+                t.source === 'recurring' &&
                 t.description.includes(recurring.description)
             );
 
@@ -512,9 +512,9 @@ class FinanceTracker {
         const lastMonth = new Date();
         lastMonth.setMonth(lastMonth.getMonth() - 1);
         const lastMonthStr = lastMonth.toISOString().slice(0, 7);
-        
+
         const archiveFile = path.join(this.dataDir, 'archive', `${this.userId}-${lastMonthStr}.json`);
-        
+
         if (!fs.existsSync(archiveFile)) {
             return { error: 'Dados do mês anterior não disponíveis' };
         }
@@ -527,7 +527,7 @@ class FinanceTracker {
 
             const currentSummary = this.getMonthSummary();
             const difference = currentSummary.totalExpenses - lastExpenses;
-            const percentageChange = lastExpenses > 0 
+            const percentageChange = lastExpenses > 0
                 ? ((difference / lastExpenses) * 100).toFixed(1)
                 : 0;
 
@@ -556,6 +556,186 @@ class FinanceTracker {
 
         return header + rows;
     }
+
+    /**
+     * Importa transações em lote (de extrato/fatura PDF)
+     * Detecta duplicatas por data + valor + descrição
+     * @param {Array} transactions - [{date, type, amount, category, description}]
+     * @param {string} source - 'extrato', 'fatura', etc.
+     * @param {string} refMonth - Mês de referência YYYY-MM (opcional)
+     * @returns {{ imported, duplicates, total, summary }}
+     */
+    importTransactions(transactions, source = 'extrato', refMonth = null) {
+        if (!Array.isArray(transactions) || transactions.length === 0) {
+            return { error: 'Nenhuma transação para importar' };
+        }
+
+        let imported = 0;
+        let duplicates = 0;
+        let totalExpenses = 0;
+        let totalIncome = 0;
+
+        for (const t of transactions) {
+            const amount = parseFloat(t.amount);
+            if (isNaN(amount) || amount <= 0) continue;
+
+            // Normaliza a data
+            let dateStr;
+            try {
+                const parsed = t.date ? new Date(t.date) : new Date();
+                dateStr = isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+            } catch {
+                dateStr = new Date().toISOString();
+            }
+
+            // Verifica duplicata (mesma data + valor + descrição similar)
+            const descNorm = (t.description || '').toLowerCase().trim();
+            const isDuplicate = this.data.transactions.some(existing => {
+                if (existing.source !== source) return false;
+                const existingDesc = (existing.description || '').toLowerCase().trim();
+                const existingDate = existing.date.slice(0, 10);
+                const newDate = dateStr.slice(0, 10);
+                return existingDate === newDate &&
+                    Math.abs(existing.amount - amount) < 0.01 &&
+                    existingDesc === descNorm;
+            });
+
+            if (isDuplicate) {
+                duplicates++;
+                continue;
+            }
+
+            const type = (t.type || 'expense').toLowerCase();
+            const category = t.category || 'Outros';
+            const necessity = type === 'expense' ? this.analyzeNecessity(category, t.description || '') : null;
+
+            const transaction = {
+                id: `${Date.now()}-${imported}`,
+                date: dateStr,
+                type,
+                amount: parseFloat(amount.toFixed(2)),
+                category,
+                description: t.description || '',
+                source,
+                ...(necessity && {
+                    necessity: necessity.level,
+                    necessityScore: necessity.score,
+                    necessityLabel: necessity.label,
+                    necessityEmoji: necessity.emoji
+                })
+            };
+
+            this.data.transactions.push(transaction);
+            imported++;
+
+            if (type === 'expense') totalExpenses += amount;
+            else totalIncome += amount;
+        }
+
+        this.saveData();
+
+        console.log(`📥 Importação: ${imported} transações importadas, ${duplicates} duplicatas ignoradas`);
+
+        return {
+            imported,
+            duplicates,
+            total: transactions.length,
+            totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+            totalIncome: parseFloat(totalIncome.toFixed(2)),
+            source,
+            summary: this.getMonthSummary()
+        };
+    }
+
+    /**
+     * Gera dados formatados para criação de gráficos matplotlib
+     * @returns {{ byCategory, dailyAccumulated, byNecessity, topExpenses }}
+     */
+    generateChartData() {
+        const expenses = this.data.transactions.filter(t => t.type === 'expense');
+        const income = this.data.transactions.filter(t => t.type === 'income');
+
+        // 1. Gastos por categoria (para gráfico de pizza)
+        const byCategory = {};
+        expenses.forEach(t => {
+            byCategory[t.category] = (byCategory[t.category] || 0) + t.amount;
+        });
+
+        // 2. Gastos diários acumulados (para gráfico de linha)
+        const dailyMap = {};
+        expenses.forEach(t => {
+            const day = new Date(t.date).getDate();
+            dailyMap[day] = (dailyMap[day] || 0) + t.amount;
+        });
+
+        // Acumula
+        const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+        const dailyAccumulated = [];
+        let accumulated = 0;
+        for (let d = 1; d <= Math.min(new Date().getDate(), daysInMonth); d++) {
+            accumulated += (dailyMap[d] || 0);
+            dailyAccumulated.push({ day: d, accumulated: parseFloat(accumulated.toFixed(2)), daily: parseFloat((dailyMap[d] || 0).toFixed(2)) });
+        }
+
+        // 3. Gastos por nível de necessidade (para gráfico de barras/rosca)
+        const byNecessity = {
+            'Essencial': 0, 'Importante': 0, 'Moderado': 0, 'Dispensável': 0, 'Supérfluo': 0
+        };
+        expenses.forEach(t => {
+            const label = t.necessityLabel || 'Moderado';
+            byNecessity[label] = (byNecessity[label] || 0) + t.amount;
+        });
+
+        // 4. Top 10 maiores gastos individuais
+        const topExpenses = [...expenses]
+            .sort((a, b) => b.amount - a.amount)
+            .slice(0, 10)
+            .map(t => ({
+                description: t.description || t.category,
+                amount: t.amount,
+                category: t.category,
+                date: new Date(t.date).toLocaleDateString('pt-BR')
+            }));
+
+        // 5. Totais
+        const totalExpenses = expenses.reduce((s, t) => s + t.amount, 0);
+        const totalIncome = income.reduce((s, t) => s + t.amount, 0);
+
+        return {
+            byCategory,
+            dailyAccumulated,
+            byNecessity,
+            topExpenses,
+            totalExpenses: parseFloat(totalExpenses.toFixed(2)),
+            totalIncome: parseFloat(totalIncome.toFixed(2)),
+            balance: parseFloat((totalIncome - totalExpenses).toFixed(2)),
+            budget: this.config.monthlyBudget,
+            month: this.data.currentMonth,
+            transactionCount: this.data.transactions.length
+        };
+    }
+
+    /**
+     * Obtém dados de um mês específico (atual ou arquivo)
+     * @param {string} monthStr - YYYY-MM
+     * @returns {object|null}
+     */
+    getMonthData(monthStr) {
+        if (monthStr === this.data.currentMonth) {
+            return this.data;
+        }
+
+        const archiveFile = path.join(this.dataDir, 'archive', `${this.userId}-${monthStr}.json`);
+        if (fs.existsSync(archiveFile)) {
+            try {
+                return JSON.parse(fs.readFileSync(archiveFile, 'utf8'));
+            } catch {
+                return null;
+            }
+        }
+        return null;
+    }
 }
 
 module.exports = FinanceTracker;
+

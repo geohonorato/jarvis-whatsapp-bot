@@ -13,6 +13,19 @@ const {
 } = require('../../finance-api');
 const { processarComGroq } = require('../../api/groq');
 const { adicionarAoHistorico } = require('../../chat-history');
+const path = require('path');
+const FinanceTracker = require('../../finance-tracker');
+
+// Instância do tracker (mesma path do pluggy-sync-job)
+const tracker = new FinanceTracker(path.join(__dirname, '../../../../data/finances/finances.json'));
+
+/**
+ * Formata valor em reais no padrão brasileiro: R$ 1.500,00
+ */
+function formatarMoeda(valor) {
+    const num = parseFloat(valor) || 0;
+    return 'R$ ' + num.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+}
 
 // Lista de comandos financeiros
 const COMANDOS_FINANCEIROS = ['/gasto', '/receita', '/financas', '/transacoes', '/orcamento', '/comparativo'];
@@ -49,11 +62,17 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
                     ? `${resultado.necessidade.emoji} ${resultado.necessidade.label} (score: ${resultado.necessidade.score}/100)`
                     : '';
                 const evitavelInfo = resultado.gastoEvitavel > 0
-                    ? `Gastos evitáveis no mês: R$${resultado.gastoEvitavel.toFixed(2)}`
+                    ? `Gastos evitáveis no mês: ${formatarMoeda(resultado.gastoEvitavel)}`
                     : '';
 
                 const partsGroq = [{
-                    text: `Formatar resposta para usuário que registrou gasto de R$${valor} em ${categoria}. ${necessidadeInfo}. Total gasto no mês: R$${resultado.totalGastoMes}. Saldo: R$${resultado.saldoMes}. ${evitavelInfo}. ${resultado.orcamento ? `Orçamento: R$${resultado.orcamento.budget}, usado: ${resultado.orcamento.percentage}%` : ''}. Responda de forma objetiva em português. Máximo 3 linhas.`
+                    text: `Formatar resposta para usuário que registrou gasto de ${formatarMoeda(valor)} em ${categoria}. ${necessidadeInfo}. Total gasto no mês: ${formatarMoeda(resultado.totalGastoMes)}. Saldo: ${formatarMoeda(resultado.saldoMes)}. ${evitavelInfo}. ${resultado.orcamento ? `Orçamento: ${formatarMoeda(resultado.orcamento.budget)}, usado: ${resultado.orcamento.percentage}%` : ''}.
+
+IMPORTANTE: A resposta será enviada via WhatsApp. 
+1. Use APENAS *texto* para negrito (NUNCA use **texto**)
+2. Use _texto_ para itálico
+3. NUNCA use cabeçalhos Markdown como #, ## ou ###
+4. Use emojis. Máximo de 3 linhas. Responda em português.`
                 }];
                 respostaFinal = await processarComGroq(partsGroq);
             } else {
@@ -69,7 +88,13 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
 
             if (!resultado.erro) {
                 const partsGroq = [{
-                    text: `Formatar resposta para usuário que registrou receita de R$${valor}. Total de receitas no mês: R$${resultado.totalReceitaMes}. Saldo: R$${resultado.saldoMes}. Responda de forma positiva em português. Máximo 2 linhas.`
+                    text: `Formatar resposta para usuário que registrou receita de ${formatarMoeda(valor)}. Total de receitas no mês: ${formatarMoeda(resultado.totalReceitaMes)}. Saldo: ${formatarMoeda(resultado.saldoMes)}.
+
+IMPORTANTE: A resposta será enviada via WhatsApp.
+1. Use APENAS *texto* para negrito (NUNCA use **texto**)
+2. Use _texto_ para itálico
+3. NUNCA use cabeçalhos Markdown como #, ## ou ###
+4. Use emojis. Máximo de 2 linhas. Responda em português.`
                 }];
                 respostaFinal = await processarComGroq(partsGroq);
             } else {
@@ -81,11 +106,27 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
 
             if (!resumo.erro) {
                 const analiseNecessidade = resumo.analiseNecessidade ?
-                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): R$${resumo.gastoEvitavel} (${resumo.percentualEvitavel}% do total).`
+                    `Análise de necessidade dos gastos: 🔴 Essencial ${resumo.analiseNecessidade.essential.percentage}%, 🟠 Importante ${resumo.analiseNecessidade.important.percentage}%, 🟡 Moderado ${resumo.analiseNecessidade.moderate.percentage}%, 🟢 Dispensável ${resumo.analiseNecessidade.dispensable.percentage}%, 🔵 Supérfluo ${resumo.analiseNecessidade.superfluous.percentage}%. Gastos evitáveis (dispensável + supérfluo): ${formatarMoeda(resumo.gastoEvitavel)} (${resumo.percentualEvitavel}% do total).`
                     : '';
 
                 const partsGroq = [{
-                    text: `Formatar resumo financeiro mensal de forma clara. Receitas: R$${resumo.receitas}, Despesas: R$${resumo.despesas}, Saldo: R$${resumo.saldo} (${resumo.status}). Top categorias: ${resumo.topCategorias.map(c => `${c.category} R$${c.amount}`).join(', ')}. Média diária: R$${resumo.mediaDiaria}. ${resumo.orcamento ? `Orçamento: ${resumo.orcamento.percentage}% usado` : ''}. ${analiseNecessidade} Responda em português com formatação clara e emojis. Máximo 8 linhas, destaque os gastos evitáveis.`
+                    text: `Formatar resumo financeiro mensal. Dados:
+• Receitas: ${formatarMoeda(resumo.receitas)}
+• Despesas: ${formatarMoeda(resumo.despesas)}
+• Saldo: ${formatarMoeda(resumo.saldo)} (${resumo.status})
+• Top categorias: ${resumo.topCategorias.map(c => `${c.category} ${formatarMoeda(c.amount)}`).join(', ')}
+• Média diária: ${formatarMoeda(resumo.mediaDiaria)}
+${resumo.orcamento ? `• Orçamento: ${resumo.orcamento.percentage}% usado` : ''}
+${analiseNecessidade}
+
+IMPORTANTE: A resposta será enviada via WhatsApp. Regras STRICT de formatação:
+1. Use APENAS *texto* para negrito (asterisco simples)
+2. Use _texto_ para itálico
+3. NUNCA use ** (duplo asterisco) e NUNCA use # (headers)
+4. Use emojis para visual
+5. Use apenas o caractere • para listas e marcadores
+6. Valores em reais: sempre no formato R$ 1.000,00
+7. Máximo de 10 linhas. Seja amigável e direto.`
                 }];
                 respostaFinal = await processarComGroq(partsGroq);
             } else {
@@ -96,9 +137,10 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
             const transacoes = obterUltimasTransacoes(chatId, 5);
 
             if (!transacoes.erro && transacoes.quantidade > 0) {
-                const lista = transacoes.transacoes.map((t, i) =>
-                    `${i + 1}. ${t.tipo}: R$${t.valor} - ${t.categoria} (${t.data})`
-                ).join('\n');
+                const lista = transacoes.transacoes.map((t, i) => {
+                    const emoji = t.tipo === 'Despesa' ? '💸' : '💰';
+                    return `${emoji} ${formatarMoeda(t.valor)} — ${t.categoria}\n     _${t.descricao || t.data}_`;
+                }).join('\n\n');
 
                 respostaFinal = `📝 *Últimas ${transacoes.quantidade} transações:*\n\n${lista}`;
             } else {
@@ -110,7 +152,7 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
             const resultado = definirOrcamento(chatId, valor);
 
             if (!resultado.erro) {
-                respostaFinal = `💰 Orçamento mensal definido em R$${valor}! Vou te avisar quando atingir 80% do limite.`;
+                respostaFinal = `💰 Orçamento mensal definido em *${formatarMoeda(valor)}*!\n\nVou te avisar quando atingir 80% do limite.`;
             } else {
                 respostaFinal = resultado.mensagem;
             }
@@ -121,10 +163,10 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
             if (!comparacao.erro) {
                 const emoji = comparacao.tendencia === 'Aumento' ? '📈' : comparacao.tendencia === 'Redução' ? '📉' : '➡️';
                 respostaFinal = `${emoji} *Comparativo Mensal*\n\n` +
-                    `Mês atual: R$${comparacao.mesAtual}\n` +
-                    `Mês anterior: R$${comparacao.mesAnterior}\n` +
-                    `Diferença: R$${comparacao.diferenca} (${comparacao.variacao > 0 ? '+' : ''}${comparacao.variacao}%)\n` +
-                    `Tendência: ${comparacao.tendencia}`;
+                    `Mês atual: *${formatarMoeda(comparacao.mesAtual)}*\n` +
+                    `Mês anterior: ${formatarMoeda(comparacao.mesAnterior)}\n` +
+                    `Diferença: ${formatarMoeda(comparacao.diferenca)} (${comparacao.variacao > 0 ? '+' : ''}${comparacao.variacao}%)\n` +
+                    `Tendência: *${comparacao.tendencia}*`;
             } else {
                 respostaFinal = comparacao.mensagem;
             }
@@ -140,7 +182,66 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
     }
 }
 
+/**
+ * Trata respostas de texto cru quando há uma transação pendente aguardando justificação (Human-in-the-Loop)
+ */
+async function handlePendingTransactionReply(client, chatId, textoUsuario, pendingTransactions) {
+    const pendingItem = pendingTransactions.getNextPending();
+    if (!pendingItem) return false;
+
+    console.log(`🕵️‍♂️ Resolvendo transação pendente (${pendingItem.description}) usando a resposta: "${textoUsuario}"`);
+
+    // Mostra pro usuário que estamos processando a resposta
+    await client.sendMessage(chatId, '⏳ Analisando a sua explicação...');
+
+    const prompt = `O usuário fez uma despesa de R$ ${pendingItem.amount} que apareceu no extrato como "${pendingItem.description}".
+O sistema não soube classificar e perguntou o que era.
+O usuário respondeu agora: "${textoUsuario}".
+
+Com base nessa resposta, classifique a despesa.
+Retorne APENAS um JSON válido neste formato exato (sem crases Markdown, sem texto fora):
+{"categoria": "NomeDaCategoria", "necessidade": "Essencial" ou "Importante" ou "Intermediário" ou "Supérfluo", "descricao_corrigida": "Descrição mais clara baseada na resposta"}`;
+
+    const classificacaoCrua = await processarComGroq([{ text: prompt }]);
+
+    try {
+        const jsonText = classificacaoCrua.replace(/```json/g, '').replace(/```/g, '').trim();
+        const data = JSON.parse(jsonText);
+
+        const categoriaFinal = data.categoria || 'Outros';
+        const necessidadeFinal = data.necessidade || 'Intermediário';
+        const descricaoFinal = data.descricao_corrigida && data.descricao_corrigida.length > 3 ? data.descricao_corrigida : pendingItem.description;
+
+        // Salvar definitivamente no Tracker
+        const result = tracker.addExpense(
+            pendingItem.amount,
+            categoriaFinal,
+            descricaoFinal,
+            pendingItem.date
+        );
+
+        // Remove da fila
+        pendingTransactions.removePendingTransaction(pendingItem.id);
+
+        let msgRetorno = `✅ *Despesa classificada e salva!*\n\n• Valor: ${formatarMoeda(pendingItem.amount)}\n• Categoria: *${categoriaFinal}*\n• Descrição: _${descricaoFinal}_\n\n(Score de Necessidade: ${necessidadeFinal})`;
+
+        if (result.orcamento && result.orcamento.percentage >= 90) {
+            msgRetorno += `\n\n⚠️ *Atenção:* O orçamento de ${categoriaFinal} já está em ${result.orcamento.percentage}%!`;
+        }
+
+        await client.sendMessage(chatId, msgRetorno);
+        adicionarAoHistorico(chatId, 'model', [{ text: msgRetorno }]);
+        return true;
+
+    } catch (e) {
+        console.error('Falha ao processar resposta da pending transaction:', e);
+        await client.sendMessage(chatId, '❌ Ops, não entendi muito bem. Pode explicar de novo o que foi aquela compra de ' + formatarMoeda(pendingItem.amount) + '?');
+        return true; // Retorna true pra interceptar a mensagem de qualquer forma
+    }
+}
+
 module.exports = {
     isFinanceCommand,
-    handleFinanceCommand
+    handleFinanceCommand,
+    handlePendingTransactionReply
 };

@@ -1,4 +1,4 @@
-require("dotenv").config();
+const config = require('../config');
 const { getGoogleAuth, CALENDAR_ID } = require('./api/calendar');
 const { google } = require('googleapis');
 
@@ -80,7 +80,7 @@ async function verificarLembretes(client) {
                         (evento.location ? `📍 Local: ${evento.location}\n` : '') +
                         (evento.description ? `📝 Descrição: ${evento.description}` : '');
 
-                    await client.sendMessage(process.env.WHATSAPP_NUMBER || '559184527196@c.us', mensagem);
+                    await client.sendMessage(config.whatsapp.number, mensagem);
                     eventosNotificados.add(chaveNotificacao);
                 }
             }

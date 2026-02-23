@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.500.0",
-    "@distube/ytdl-core": "^4.16.12",
     "@google-cloud/local-auth": "^3.0.1",
     "@google/generative-ai": "^0.1.0",
     "@smithy/util-stream": "^2.1.0",
@@ -28,6 +27,8 @@
     "magisterium": "^0.0.5",
     "mime-types": "^3.0.1",
     "moment-timezone": "^0.6.0",
+    "node-cron": "^4.2.1",
+    "pluggy-sdk": "^0.83.0",
     "qrcode-terminal": "^0.12.0",
     "whatsapp-web.js": "^1.34.6",
     "youtube-transcript": "^1.2.1"

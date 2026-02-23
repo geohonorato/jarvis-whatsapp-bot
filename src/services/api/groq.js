@@ -155,7 +155,6 @@ async function processarComGroq(parts, tentativa = 1) {
         try {
             const response = await groqClient.post('/chat/completions', {
                 ...defaultOptions,
-                model: "llama-3.3-70b-versatile", // Garante modelo rápido
                 messages: [
                     {
                         role: 'system',
