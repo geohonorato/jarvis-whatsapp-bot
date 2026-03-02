@@ -15,7 +15,7 @@ Assistente pessoal inteligente para WhatsApp com múltiplas IAs, geração de im
 - **Google Gemini** — Análise de imagens, áudio e visão computacional
 - **Magisterium AI** — Q&A sobre doutrina católica com fontes oficiais
 - **Perplexity** — Pesquisa web em tempo real
-- **RAG (Retrieval-Augmented Generation)** — Memória de longo prazo com LanceDB + embeddings
+- **RAG (Retrieval-Augmented Generation)** — Memória de longo prazo offline com Transformers.js
 
 ### 🎨 Geração de Imagens
 ```
@@ -161,17 +161,21 @@ src/
 │   ├── media/
 │   │   ├── converter.js              # Conversão de mídia (FFmpeg)
 │   │   └── downloader.js             # Download de mídia
+│   ├── activecampaign/
+│   │   └── acService.js              # Controle AC via internet
+│   ├── chat/
+│   │   ├── chat-history.js           # Histórico de conversas
+│   │   └── meeting-summary.js        # Resumo de atas/reuniões
+│   ├── finance/
+│   │   ├── finance-api.js            # API bancárias/dados
+│   │   ├── finance-charts.js         # Geração de gráficos visuais
+│   │   └── finance-tracker.js        # Lançamentos contábeis
+│   ├── magisterium/
+│   │   └── magisterium.js            # Doutrina e Q&A Católico
 │   ├── rag/
-│   │   ├── rag-service.js            # RAG service (Node.js)
-│   │   ├── rag_db.py                 # Vector DB (Python/LanceDB)
-│   │   ├── cleanup_memories.py       # Limpeza de memórias
-│   │   └── migrate_model.py          # Migração de modelo
-│   ├── chat-history.js               # Histórico de conversas
-│   ├── finance-tracker.js            # Sistema financeiro
-│   ├── finance-api.js                # API de finanças
-│   ├── magisterium.js                # Magisterium AI client
-│   ├── acService.js                  # Controle AC via internet
-│   └── reminders.js                  # Lembretes de eventos
+│   │   └── rag-service.js            # Motor RAG com Transformers.js local
+│   └── reminders/
+│       └── reminders.js              # Lembretes processados em background
 └── utils/
     ├── cache.js                      # Cache em memória
     ├── ffmpeg-path.js                # Detecção do FFmpeg
@@ -191,8 +195,8 @@ src/
 ### 1. Pré-requisitos
 
 - **Node.js 18+**
-- **Python 3.8+** (para RAG e interpretador)
-- **FFmpeg** (opcional, para processamento de mídia)
+- **Python 3.8+** (opcional, para rodar interpretador de gráficos)
+- **FFmpeg** (opcional, para extrair áudios/vídeos)
 
 ### 2. Instalação
 
@@ -200,7 +204,7 @@ src/
 git clone https://github.com/geohonorato/jarvis-whatsapp-bot.git
 cd jarvis-whatsapp-bot
 npm install
-pip install -r requirements.txt  # Para RAG/Python
+pip install matplotlib pandas seaborn # Opcional: Para gerar os gráficos Python
 ```
 
 ### 3. Configuração
@@ -273,7 +277,7 @@ Escaneie o QR code que aparecerá no terminal para conectar ao WhatsApp.
 | **Google Calendar** | Agenda e lembretes | Opcional |
 | **Perplexity** | Pesquisa web real-time | Opcional |
 | **Magisterium** | Doutrina católica | Opcional |
-| **LanceDB** | RAG / memória vetorial | Automático |
+| **Transformers.js** | Motor RAG 100% nativo offline | Automático |
 | **Python** | Interpretador + gráficos | Opcional |
 
 ---
