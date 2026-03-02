@@ -4,7 +4,7 @@
  */
 
 const { resumirVideoYoutube } = require('../../api/youtube');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 
 /**
  * Processa comando /resumir

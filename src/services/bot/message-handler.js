@@ -9,7 +9,7 @@
  * Cada domínio (calendário, finanças, imagem, etc.) tem seu próprio handler em ./handlers/
  */
 
-const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat-history');
+const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat/chat-history');
 const {
     processarMensagemMultimodal: processarComGroqPrincipal,
     filtrarPensamentos,
@@ -280,11 +280,12 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
         console.time('🔍 Tempo RAG');
 
         // RAG: Busca inteligente com query expansion para queries curtas
-        // Estratégia: busca DUPLA — query original + query expandida com contexto do histórico
+        // Estratégia: busca DUPLA — mas agora otimizada rodando concorrentemente graças a API JS rápida
         let contextoRAG = [];
 
         // 1. Busca direta (sempre)
-        const resultsDirect = await ragService.buscarContexto(textoUsuario);
+        const pDirect = ragService.buscarContexto(textoUsuario);
+        let pExpanded = Promise.resolve([]);
 
         // 2. Busca expandida (só para queries curtas, com contexto de msgs anteriores do USER)
         if (textoUsuario.length < 40 && historico.length > 0) {
@@ -297,15 +298,18 @@ async function processarMensagemTexto(client, partsEntrada, chatId, usarGemini =
             if (lastUserMsgs.length > 0) {
                 const expandedQuery = `${lastUserMsgs.join('. ')}. ${textoUsuario}`;
                 console.log(`🔎 Query expandida: "${textoUsuario}" → "${expandedQuery.substring(0, 80)}..."`);
-                const resultsExpanded = await ragService.buscarContexto(expandedQuery);
+                pExpanded = ragService.buscarContexto(expandedQuery);
+            }
+        }
 
-                // Merge: adiciona resultados expandidos que não estão nos diretos
-                const directTexts = new Set(resultsDirect.map(d => d.text));
-                for (const r of resultsExpanded) {
-                    if (!directTexts.has(r.text)) {
-                        resultsDirect.push(r);
-                    }
-                }
+        // Aguarda ambas buscarem concorrentemente
+        const [resultsDirect, resultsExpanded] = await Promise.all([pDirect, pExpanded]);
+
+        // Merge: adiciona resultados expandidos que não estão nos diretos
+        const directTexts = new Set(resultsDirect.map(d => d.text));
+        for (const r of resultsExpanded) {
+            if (!directTexts.has(r.text)) {
+                resultsDirect.push(r);
             }
         }
 

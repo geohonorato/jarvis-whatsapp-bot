@@ -3,7 +3,7 @@
  * Produz gráficos de pizza (categorias), barras (top gastos) e linha (acumulado)
  */
 
-const { executePythonCode } = require('./interpreter/python-executor');
+const { executePythonCode } = require('../interpreter/python-executor');
 
 /**
  * Gera gráficos financeiros a partir dos dados do FinanceTracker

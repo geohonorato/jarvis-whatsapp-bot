@@ -10,11 +10,11 @@ const {
     obterUltimasTransacoes,
     definirOrcamento,
     obterComparacao
-} = require('../../finance-api');
+} = require('../../finance/finance-api');
 const { processarComGroq } = require('../../api/groq');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 const path = require('path');
-const FinanceTracker = require('../../finance-tracker');
+const FinanceTracker = require('../../finance/finance-tracker');
 
 // Instância do tracker (mesma path do pluggy-sync-job)
 const tracker = new FinanceTracker(path.join(__dirname, '../../../../data/finances/finances.json'));

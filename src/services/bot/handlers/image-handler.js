@@ -4,7 +4,7 @@
  */
 
 const { processarComandoImagem } = require('../../api/image-generator');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 const { MessageMedia } = require('whatsapp-web.js');
 const fs = require('fs');
 const path = require('path');

@@ -5,8 +5,8 @@
  */
 
 const fs = require('fs');
-const { getOrCreateTracker } = require('../finance-api');
-const { gerarGraficosFinanceiros } = require('../finance-charts');
+const { getOrCreateTracker } = require('../finance/finance-api');
+const { gerarGraficosFinanceiros } = require('../finance/finance-charts');
 const MessageMedia = require('whatsapp-web.js').MessageMedia;
 const config = require('../../config');
 

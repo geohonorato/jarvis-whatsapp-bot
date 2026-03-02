@@ -3,7 +3,7 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const path = require('path');
 const fs = require('fs');
-const { iniciarVerificacaoLembretes } = require('../reminders');
+const { iniciarVerificacaoLembretes } = require('../reminders/reminders');
 const { iniciarJobPascom } = require('../jobs/pascom-notification');
 const { iniciarScheduler } = require('../jobs/scheduler');
 const { handleMessage } = require('./message-handler');
@@ -70,17 +70,13 @@ const cachePath = path.join(dataDir, '.wwebjs_cache');
 console.log(`📂 Caminho de autenticação: ${authPath}`);
 console.log(`📂 Caminho de cache: ${cachePath}`);
 
-// Importa LocalWebCache para redirecionar cache do WhatsApp Web
-const LocalWebCache = require('whatsapp-web.js/src/webCache/LocalWebCache');
+// Importa LocalWebCache (Desativado temporariamente devido a bugs de ENOTEMPTY no OCI)
+// const LocalWebCache = require('whatsapp-web.js/src/webCache/LocalWebCache');
 
 const client = new Client({
     authStrategy: new LocalAuth({
         clientId: "bot-whatsapp",
         dataPath: authPath,
-    }),
-    webVersionCache: new LocalWebCache({
-        path: cachePath,
-        strict: false
     }),
     puppeteer: {
         headless: true,
@@ -96,8 +92,8 @@ const client = new Client({
             '--disable-background-networking',
             '--mute-audio'
         ],
-        timeout: 120000,
-        protocolTimeout: 120000,
+        timeout: 300000,
+        protocolTimeout: 300000,
         ignoreDefaultArgs: ['--disable-extensions'],
         handleSIGINT: false,
         handleSIGTERM: false,
@@ -134,7 +130,7 @@ client.on('ready', () => {
     iniciarVerificacaoLembretes(client);
     iniciarJobPascom(client);
     iniciarScheduler(client);
-    schedulePluggySync(client);
+    // schedulePluggySync(client); // Desativado temporariamente devido a lentidão do Open Finance
 
     // Inicializa RAG (Eager Loading) para evitar delay na primeira mensagem
     const ragService = require('../rag/rag-service');

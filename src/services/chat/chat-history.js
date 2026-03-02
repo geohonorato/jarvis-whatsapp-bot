@@ -2,8 +2,8 @@
  * Gerenciador de histórico de chat otimizado
  * Usa Map para armazenar histórico com limpeza automática
  */
-const config = require('../config');
-const { logger } = require('../utils/logger');
+const config = require('../../config');
+const { logger } = require('../../utils/logger');
 
 // Mapa para armazenar o histórico de conversas por chat
 const chatHistory = new Map();
@@ -28,10 +28,10 @@ function adicionarAoHistorico(chatId, role, parts) {
 
     const historico = chatHistory.get(chatId);
     const metadata = chatMetadata.get(chatId);
-    
+
     // Garante que parts seja sempre um array
     const partsArray = Array.isArray(parts) ? parts : [{ text: String(parts) }];
-    
+
     historico.push({
         role,
         parts: partsArray,
@@ -144,7 +144,7 @@ function iniciarLimpezaAutomatica() {
     setInterval(() => {
         limparHistoricosInativos();
     }, interval);
-    
+
     log.info(`Limpeza automática de históricos iniciada (intervalo: ${interval}ms)`);
 }
 

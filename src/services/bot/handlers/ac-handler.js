@@ -1,4 +1,4 @@
-const ACService = require('../../acService');
+const ACService = require('../../activecampaign/acService');
 
 /**
  * Checks if the message is an AC command.

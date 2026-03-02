@@ -153,10 +153,130 @@ async function queryDatabase(databaseId, filter = null, sorts = null) {
     }
 }
 
+/**
+ * Cria uma página filha dentro de outra página (não banco de dados)
+ */
+async function createChildPage(parentPageId, title, icon = null) {
+    try {
+        const payload = {
+            parent: { page_id: parentPageId },
+            properties: {
+                title: { title: [{ text: { content: title } }] }
+            }
+        };
+        if (icon) {
+            payload.icon = { type: 'emoji', emoji: icon };
+        }
+        const response = await axios.post(`${BASE_URL}/pages`, payload, { headers: getHeaders() });
+        return { success: true, data: response.data };
+    } catch (e) {
+        console.error('Erro ao criar página filha no Notion:', e.response?.data || e.message);
+        return { success: false, error: e.response?.data?.message || e.message };
+    }
+}
+
+/**
+ * Busca páginas no Notion e retorna candidatas para ser "pai" de uma reunião
+ * Prioriza páginas com termos como "Reuniões", "Meetings", "Notas", "Atas" etc.
+ */
+async function findBestParentPage(query) {
+    try {
+        // Busca primeiro por termos específicos de reunião
+        const meetingTerms = ['Reuniões', 'Meetings', 'Atas', 'Meeting Notes', 'Notas de Reunião'];
+        
+        for (const term of meetingTerms) {
+            const response = await axios.post(`${BASE_URL}/search`, {
+                query: term,
+                filter: { value: 'page', property: 'object' },
+                page_size: 5
+            }, { headers: getHeaders() });
+            
+            if (response.data.results.length > 0) {
+                // Retorna a primeira página que contém o termo
+                for (const page of response.data.results) {
+                    const title = extractPageTitle(page);
+                    if (title.toLowerCase().includes(term.toLowerCase())) {
+                        return { success: true, data: page, title };
+                    }
+                }
+            }
+        }
+
+        // Se a query tiver contexto, busca por tema relacionado
+        if (query) {
+            const response = await axios.post(`${BASE_URL}/search`, {
+                query: query,
+                filter: { value: 'page', property: 'object' },
+                page_size: 10
+            }, { headers: getHeaders() });
+
+            if (response.data.results.length > 0) {
+                return { success: true, data: response.data.results[0], title: extractPageTitle(response.data.results[0]) };
+            }
+        }
+
+        // Fallback: busca genérica
+        const response = await axios.post(`${BASE_URL}/search`, {
+            query: 'Reuniões',
+            page_size: 5
+        }, { headers: getHeaders() });
+
+        if (response.data.results.length > 0) {
+            return { success: true, data: response.data.results[0], title: extractPageTitle(response.data.results[0]) };
+        }
+
+        return { success: false, error: 'Nenhuma página pai encontrada no Notion' };
+    } catch (e) {
+        console.error('Erro ao buscar página pai no Notion:', e.response?.data || e.message);
+        return { success: false, error: e.response?.data?.message || e.message };
+    }
+}
+
+/**
+ * Retorna o ID de uma página pelo seu URL ou título
+ */
+async function getPageById(pageId) {
+    try {
+        const response = await axios.get(`${BASE_URL}/pages/${pageId}`, { headers: getHeaders() });
+        return { success: true, data: response.data };
+    } catch (e) {
+        console.error('Erro ao obter página no Notion:', e.response?.data || e.message);
+        return { success: false, error: e.response?.data?.message || e.message };
+    }
+}
+
+/**
+ * Extrai o título de uma página Notion
+ */
+function extractPageTitle(page) {
+    if (!page || !page.properties) return 'Sem título';
+    for (const key in page.properties) {
+        const prop = page.properties[key];
+        if (prop.type === 'title' && prop.title && prop.title.length > 0) {
+            return prop.title.map(t => t.plain_text).join('');
+        }
+    }
+    return 'Sem título';
+}
+
+/**
+ * Gera a URL pública de uma página no Notion
+ */
+function getPageUrl(pageId) {
+    // Remove hífens do UUID para formar a URL do Notion
+    const cleanId = pageId.replace(/-/g, '');
+    return `https://www.notion.so/${cleanId}`;
+}
+
 module.exports = {
     search,
     createPage,
+    createChildPage,
     appendBlocks,
     queryDatabase,
+    findBestParentPage,
+    getPageById,
+    extractPageTitle,
+    getPageUrl,
     isReady: () => !!NOTION_API_KEY
 };

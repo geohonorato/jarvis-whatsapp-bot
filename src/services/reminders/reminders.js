@@ -1,5 +1,5 @@
-const config = require('../config');
-const { getGoogleAuth, CALENDAR_ID } = require('./api/calendar');
+const config = require('../../config');
+const { getGoogleAuth, CALENDAR_ID } = require('../api/calendar');
 const { google } = require('googleapis');
 
 // Tempos de notificação (em minutos)

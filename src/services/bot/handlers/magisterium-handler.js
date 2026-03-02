@@ -3,8 +3,8 @@
  * Extraído de message-handler.js para melhor organização
  */
 
-const { responderMagisteriumComFormatacao } = require('../../magisterium');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { responderMagisteriumComFormatacao } = require('../../magisterium/magisterium');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 
 /**
  * Processa comando /magisterium gerado pela IA

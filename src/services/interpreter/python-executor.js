@@ -90,7 +90,8 @@ async function executePythonCode(code) {
         fs.writeFileSync(scriptPath, cleanCode, 'utf-8');
 
         // Executa com timeout de 30 segundos
-        exec(`python "${scriptPath}"`, { timeout: 30000 }, (error, stdout, stderr) => {
+        const pythonCommand = process.platform === 'win32' ? 'python' : 'python3';
+        exec(`${pythonCommand} "${scriptPath}"`, { timeout: 30000 }, (error, stdout, stderr) => {
             // Limpa o script temporário
             try {
                 fs.unlinkSync(scriptPath);

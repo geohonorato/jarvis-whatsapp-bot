@@ -19,7 +19,7 @@ const {
     CALENDAR_ID,
     PASCOM_CALENDAR_ID
 } = require('../../api/calendar');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 const { filtrarPensamentos } = require('../../api/groq');
 const { setPascomGroupId } = require('../../jobs/pascom-notification');
 

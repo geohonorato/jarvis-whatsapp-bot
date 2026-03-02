@@ -5,10 +5,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { adicionarAoHistorico } = require('../../chat-history');
+const { adicionarAoHistorico } = require('../../chat/chat-history');
 const { analisarConteudoMultimodal } = require('../../api/gemini');
-const { getOrCreateTracker } = require('../../finance-api');
-const { gerarGraficosFinanceiros } = require('../../finance-charts');
+const { getOrCreateTracker } = require('../../finance/finance-api');
+const { gerarGraficosFinanceiros } = require('../../finance/finance-charts');
+const { handleAudioWithClassification } = require('./meeting-handler');
 const MessageMedia = require('whatsapp-web.js').MessageMedia;
 
 /**
@@ -122,29 +123,8 @@ async function handleMediaMessage(client, msg, chatId, processarMensagemTexto) {
         return 'handled';
     }
     else if (msg.type === 'audio' || msg.type === 'ptt') {
-        console.log('\n🎤 Áudio recebido - processando com sistema híbrido...');
-        try {
-            const media = await msg.downloadMedia();
-            if (!media || !media.data) {
-                await client.sendMessage(chatId, '❌ Erro ao baixar áudio.');
-                return null;
-            }
-
-            console.log(`🎵 Áudio ${media.mimetype} recebido`);
-
-            const partsEntrada = [
-                { text: "Transcreva este áudio em português do Brasil." },
-                { inlineData: { data: media.data, mimeType: media.mimetype } }
-            ];
-
-            adicionarAoHistorico(chatId, 'user', partsEntrada);
-            await processarMensagemTexto(client, partsEntrada, chatId, true);
-
-        } catch (error) {
-            console.error('\n❌ Erro ao processar áudio:', error);
-            adicionarAoHistorico(chatId, 'user', [{ text: "[Erro ao processar áudio enviado]" }]);
-            await client.sendMessage(chatId, '❌ Erro inesperado ao processar áudio.');
-        }
+        console.log('\n🎤 Áudio recebido - roteando para classificação inteligente...');
+        await handleAudioWithClassification(client, msg, chatId, processarMensagemTexto);
         return 'handled';
     }
     else if (msg.type === 'document') {
@@ -159,8 +139,25 @@ async function handleMediaMessage(client, msg, chatId, processarMensagemTexto) {
         const isPDF = mimetype.includes('pdf');
         const isSpreadsheet = mimetype.includes('spreadsheet') || mimetype.includes('excel') ||
             filename.endsWith('.xlsx') || filename.endsWith('.xls') || filename.endsWith('.csv');
+        const isAudioFile = mimetype.includes('audio') || mimetype.includes('ogg') ||
+            /\.(mp3|wav|ogg|m4a|aac|wma|flac|opus|webm)$/i.test(filename);
 
         console.log(`\n📄 Documento recebido: ${filename} (${mimetype})`);
+
+        // Áudio enviado como documento → roteia para o handler de áudio/reunião
+        if (isAudioFile) {
+            console.log(`🎤 Documento é um arquivo de áudio (${filename}) → roteando para classificação inteligente...`);
+            // Simula msg com media já baixada para o handler de áudio
+            const fakeAudioMsg = {
+                ...msg,
+                type: 'audio',
+                downloadMedia: async () => media,
+                isForwarded: msg.isForwarded || msg._data?.isForwarded || true, // Trata como encaminhado (transcrição direta)
+                _data: { ...msg._data, isForwarded: true }
+            };
+            await handleAudioWithClassification(client, fakeAudioMsg, chatId, processarMensagemTexto);
+            return 'handled';
+        }
 
         if (!isPDF && !isSpreadsheet) {
             await client.sendMessage(chatId, `📄 Recebi o documento *${filename}*, mas no momento só consigo analisar PDFs e planilhas. Envie em formato PDF!`);
