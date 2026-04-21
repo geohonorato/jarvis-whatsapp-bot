@@ -114,7 +114,7 @@ class FinanceTracker {
     }
 
     async getMonthSummary(monthStr = new Date().toISOString().slice(0, 7)) {
-        const rows = await this.getQuery(`SELECT * FROM transactions WHERE date LIKE ?`, [\`\${monthStr}%\`]);
+        const rows = await this.getQuery(`SELECT * FROM transactions WHERE date LIKE ?`, [`${monthStr}%`]);
         
         let expenses = 0;
         let income = 0;
