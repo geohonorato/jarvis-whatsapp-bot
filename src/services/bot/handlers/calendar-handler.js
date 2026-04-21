@@ -20,7 +20,6 @@ const {
     PASCOM_CALENDAR_ID
 } = require('../../api/calendar');
 const { adicionarAoHistorico } = require('../../chat/chat-history');
-const { filtrarPensamentos } = require('../../api/groq');
 const { setPascomGroupId } = require('../../jobs/pascom-notification');
 
 // Estado de conversa para fluxo de remoção de eventos
@@ -111,8 +110,8 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                         const calLabel = isGroup ? 'PASCOM ⛪' : 'Pessoal';
                         mensagemResposta = `> *Evento ${calLabel} Adicionado* ✨\n\n` +
                             `📝 *${evento.summary}*\n` +
-                            `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                            `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                            `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                            `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
                             (evento.description ? `📋 ${evento.description}\n` : '') +
                             (evento.location ? `📍 ${evento.location}\n` : '');
                     } catch (error) {
@@ -137,8 +136,8 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                     const calLabel = isGroupAdd ? 'PASCOM ⛪' : 'Pessoal';
                     mensagemResposta = `> *Evento ${calLabel} Adicionado* ✨\n\n` +
                         `📝 *${evento.summary}*\n` +
-                        `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                        `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                        `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                        `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
                         (evento.description ? `📋 ${evento.description}\n` : '') +
                         (evento.location ? `📍 ${evento.location}\n` : '');
                 } catch (error) {
@@ -157,8 +156,8 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                     const fim = new Date(evento.end.dateTime || evento.end.date);
                     mensagemResposta = `> *Evento PASCOM Adicionado* ⛪✨\n\n` +
                         `📝 *${evento.summary}*\n` +
-                        `📅 Início: ${inicio.toLocaleString('pt-BR')}\n` +
-                        `🔚 Fim: ${fim.toLocaleString('pt-BR')}\n` +
+                        `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                        `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
                         (evento.description ? `📋 ${evento.description}\n` : '') +
                         (evento.location ? `📍 ${evento.location}\n` : '');
                 } catch (error) {

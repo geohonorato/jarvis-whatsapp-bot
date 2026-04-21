@@ -7,8 +7,7 @@
  * 3. Criar páginas no Notion com resumo + transcrição
  */
 
-const { analisarConteudoMultimodal } = require('../api/gemini');
-const { processarComGroq } = require('../api/groq');
+const { processarComGenerativeAI: processarComGroq } = require('../api/gemini');
 const notionApi = require('../api/notion');
 
 // ============================================================

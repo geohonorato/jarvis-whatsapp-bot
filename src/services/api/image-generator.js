@@ -41,7 +41,7 @@ const RATIO_TO_DIMS = {
  */
 async function aprimorarPromptComGroq(promptOriginal) {
     try {
-        const { processarMensagemMultimodal } = require('./groq');
+        const { processarMensagemMultimodal } = require('./gemini');
 
         const instrucao = [{
             text: `You are an expert AI image prompt engineer.

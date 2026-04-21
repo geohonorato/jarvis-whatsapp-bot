@@ -33,7 +33,7 @@ async function verificarLembretes(client) {
         const limite = new Date(agora.getTime() + 48 * 60 * 60 * 1000);
 
         const response = await calendar.events.list({
-            calendarId: 'primary', // Usa 'primary' se CALENDAR_ID for indefinido
+            calendarId: CALENDAR_ID,
             timeMin: agora.toISOString(),
             timeMax: limite.toISOString(),
             singleEvents: true,

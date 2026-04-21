@@ -23,7 +23,7 @@ const groqClient = axios.create({
 
 // Configurações do modelo
 const defaultOptions = {
-    model: "openai/gpt-oss-120b", // GPT OSS 120B - melhor raciocínio para datas e cálculos
+    model: "llama-3.3-70b-versatile", // Modelo versátil primário da Groq (melhor limite de cota)
     temperature: 0.6,
     max_tokens: 8192,
     top_p: 1,
@@ -37,14 +37,16 @@ function formatarHistoricoParaGroq(historico) {
     // Mapeia o histórico para o formato de mensagens
     return historico.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'assistant',
-        content: msg.parts
-            .map(part => {
-                if (part.text) return part.text;
-                if (part.inlineData) return '[Imagem anexada]';
-                return '';
-            })
-            .join('\n')
-            .trim()
+        content: msg.parts.map(part => {
+            if (part.text) return { type: 'text', text: part.text };
+            if (part.inlineData) {
+                const mimeType = part.inlineData.mimeType || 'image/jpeg';
+                // Para não estourar o limite de histórico com base64 antigos, deixamos um placeholder
+                // no histórico e só processamos a imagem da mensagem *atual*.
+                return { type: 'text', text: '[Imagem enviada anteriormente]' };
+            }
+            return { type: 'text', text: '' };
+        })
     }));
 }
 
@@ -78,12 +80,33 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
         const { dataFormatada, horaFormatada, diaSemana } = obterDataHoraAtual();
         const contextoAtual = `Hoje é ${diaSemana}, ${dataFormatada} às ${horaFormatada}\n\n`;
 
-        // Monta o prompt atual combinando as partes
-        const promptAtual = parts.map(part => {
-            if (part.text) return part.text;
-            if (part.inlineData) return '[Imagem anexada]';
-            return '';
-        }).join('\n');
+        const temImagem = parts.some(part => part.inlineData != null);
+
+        // Se tiver imagem, OBRIGATORIAMENTE usamos o modelo LLaMA Vision (Free Tier - 11B)
+        const modelToUse = temImagem ? 'llama-3.2-11b-vision-preview' : defaultOptions.model;
+
+        // Monta o prompt atual combinando as partes no formato array da V1 OpenAI
+        let promptParts = [];
+
+        if (contextoAtual) {
+            promptParts.push({ type: 'text', text: contextoAtual });
+        }
+
+        parts.forEach(part => {
+            if (part.text) {
+                promptParts.push({ type: 'text', text: part.text });
+            }
+            if (part.inlineData) {
+                const mimeType = part.inlineData.mimeType || 'image/jpeg';
+                const base64Data = part.inlineData.data;
+                promptParts.push({
+                    type: 'image_url',
+                    image_url: {
+                        url: `data:${mimeType};base64,${base64Data}`
+                    }
+                });
+            }
+        });
 
         try {
             // Configura a chamada para a API da Groq
@@ -91,16 +114,75 @@ async function processarMensagemMultimodal(parts, historico = [], tentativa = 1)
             const messages = [
                 { role: 'system', content: gerarSystemMessage() },
                 ...historicoGroq,
-                { role: 'user', content: contextoAtual + promptAtual }
+                { role: 'user', content: promptParts }
             ];
 
             // Estimativa de tokens (1 token ~= 4 chars)
-            const totalChars = messages.reduce((acc, msg) => acc + (msg.content?.length || 0), 0);
-            console.log(`📊 Estimativa de Payload: ~${Math.ceil(totalChars / 4)} tokens`);
+            let totalChars = 0;
+            messages.forEach(msg => {
+                if (typeof msg.content === 'string') {
+                    totalChars += msg.content.length;
+                } else if (Array.isArray(msg.content)) {
+                    msg.content.forEach(part => {
+                        if (part.type === 'text' && part.text) totalChars += part.text.length;
+                        if (part.type === 'image_url') totalChars += 1000; // Custo fixo base aproximado para img
+                    });
+                }
+            });
+
+            // Limitador Dinâmico Inteligente para evitar erro 413 (Rate Limit - Message Size Too Large)
+            // O modelo Groq gpt-oss-120b grátis tem limite de 8000 Tokens (aproximadamente 32.000 caracteres)
+            // Vamos fixar um limite de segurança em ~24.000 caracteres (6000 tokens)
+            const MAX_CHARS = 24000;
+
+            // Loop 1: Remover o histórico de conversa aos poucos (mantendo System Prompt e a Pergunta Atual)
+            while (totalChars > MAX_CHARS && messages.length > 2) {
+                const removido = messages.splice(1, 1)[0]; // Remove o índice 1 (a mensagem mais velha do usuário/bot)
+                if (typeof removido.content === 'string') {
+                    totalChars -= removido.content.length;
+                } else if (Array.isArray(removido.content)) {
+                    removido.content.forEach(part => {
+                        if (part.type === 'text' && part.text) totalChars -= part.text.length;
+                        if (part.type === 'image_url') totalChars -= 1000;
+                    });
+                }
+            }
+
+            // Loop 2: Se ainda for maior que o limite após deletar todo o histórico, corta o contexto RAG final na brutalidade
+            if (totalChars > MAX_CHARS) {
+                console.warn(`⚠️ Aviso: Mesmo sem histórico, conteúdo gigantesco detectado: ${totalChars} caracteres. Aparando prompt principal.`);
+                const excesso = totalChars - MAX_CHARS;
+
+                // Só apara se a última mensagem for puro texto e não tiver array
+                const lastMsg = messages[messages.length - 1];
+                if (typeof lastMsg.content === 'string') {
+                    lastMsg.content = lastMsg.content.substring(0, lastMsg.content.length - excesso - 100) + '... [CORTADO PELO LIMITE DE MEMÓRIA DA IA]';
+                } else if (Array.isArray(lastMsg.content)) {
+                    const textPart = lastMsg.content.find(p => p.type === 'text');
+                    if (textPart && typeof textPart.text === 'string') {
+                        textPart.text = textPart.text.substring(0, textPart.text.length - excesso - 100) + '... [CORTADO]';
+                    }
+                }
+
+                // Recalcula final
+                totalChars = 0;
+                messages.forEach(msg => {
+                    if (typeof msg.content === 'string') totalChars += msg.content.length;
+                    else if (Array.isArray(msg.content)) {
+                        msg.content.forEach(part => {
+                            if (part.type === 'text' && part.text) totalChars += part.text.length;
+                            if (part.type === 'image_url') totalChars += 1000;
+                        });
+                    }
+                });
+            }
+
+            console.log(`📊 Estimativa de Payload Final: ~${Math.ceil(totalChars / 4)} tokens (${totalChars} chars)`);
 
             const response = await groqClient.post('/chat/completions', {
                 ...defaultOptions,
-                messages
+                model: modelToUse,
+                messages: messages
             });
 
             const completion = response.data;

@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const pluggyApi = require('../api/pluggy');
 const FinanceTracker = require('../finance/finance-tracker');
-const groqApi = require('../api/groq');
+const groqApi = require('../api/gemini');
 const pendingTransactions = require('../bot/handlers/pending-transactions');
 const { Client } = require('whatsapp-web.js');
 
@@ -53,7 +53,7 @@ Se a descrição for muito vaga e não indicar o que foi comprado (ex: "Pix Envi
 Retorne APENAS um JSON válido neste formato exato (sem crases Markdown, sem texto fora):
 {"categoria": "NomeDaCategoriaOuPendente", "necessidade": "Essencial" ou "Importante" ou "Intermediário" ou "Supérfluo" ou "Indefinido"}`;
 
-    const classificacaoCrua = await groqApi.processarComGroq([{ text: prompt }]);
+    const classificacaoCrua = await groqApi.processarComGenerativeAI([{ text: prompt }]);
 
     try {
         const jsonText = classificacaoCrua.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -168,7 +168,7 @@ Humilhe a atitude dele de gastar com bobagem. Dê um sermão, bata nele moralmen
 Máximo de 4-5 frases curtas. Formate em texto de WhatsApp (asterisco para negrito e underline para itálico, NUNCA use markdown **).`;
 
                     try {
-                        const sermao = await groqApi.processarComGroq([{ text: promptSermao }]);
+                        const sermao = await groqApi.processarComGenerativeAI([{ text: promptSermao }]);
                         warningMessages.push(`🚨 *FISCAL JARVIS - GASTO SUPÉRFLUO!* 🚨\n\n${sermao}`);
                     } catch (e) {
                         warningMessages.push(`🚨 *Alerta de Gasto Evitável!*\nVocê acabou de gastar ${formatCurrency(valorAbsoluto)} em _${trx.description}_ (${classificada.categoria}).\nCuidado com o limite!`);

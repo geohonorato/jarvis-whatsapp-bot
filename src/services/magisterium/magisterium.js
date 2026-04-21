@@ -96,8 +96,8 @@ async function responderMagisteriumComFormatacao(parts, historico = []) {
             return respostaMagisterium;
         }
 
-        // 2. Importa o Groq para formatação
-        const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
+        // 2. Importa o Gemini para formatação
+        const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/gemini');
 
         // 3. Cria prompt para o Groq formatar a resposta
         const promptFormatacao = [

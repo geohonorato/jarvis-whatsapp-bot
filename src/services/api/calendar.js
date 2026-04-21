@@ -229,8 +229,8 @@ async function listarEventosAmanha(auth) {
         fimAmanha.setHours(23, 59, 59, 999);
 
         console.log('\n📅 Buscando eventos para amanhã:', {
-            inicio: amanha.toLocaleString('pt-BR'),
-            fim: fimAmanha.toLocaleString('pt-BR')
+            inicio: amanha.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }),
+            fim: fimAmanha.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
         });
 
         const res = await calendar.events.list({
@@ -389,31 +389,31 @@ async function adicionarEvento(auth, eventoInfo, targetCalendarId = null) {
         // Parse das informações do evento
         const [titulo, dataInicio, dataFim, descricao, local] = eventoInfo.split('|').map(item => item.trim());
 
-        // Parse de data no formato brasileiro (dd/mm/yyyy HH:mm)
-        function parseDateBR(str) {
-            // Tenta formatos: "dd/mm/yyyy HH:mm", "dd/mm/yyyy", "yyyy-mm-dd HH:mm", ISO
+        function parseDate(str) {
+            // Tenta criar um objeto Moment nativamente no fuso do Brasil ignorando a re-adequação agressiva do NodeJS pro UTC
+            // Formatos: "dd/mm/yyyy HH:mm", "dd/mm/yyyy", "yyyy-mm-dd HH:mm", ISO
             const brMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2})$/);
             if (brMatch) {
                 const [, day, month, year, hour, min] = brMatch;
-                return new Date(year, month - 1, day, hour, min);
+                return moment.tz(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')} ${hour.padStart(2, '0')}:${min.padStart(2, '0')}`, "YYYY-MM-DD HH:mm", 'America/Sao_Paulo');
             }
             const brDateOnly = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
             if (brDateOnly) {
                 const [, day, month, year] = brDateOnly;
-                return new Date(year, month - 1, day);
+                return moment.tz(`${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')} 00:00`, "YYYY-MM-DD HH:mm", 'America/Sao_Paulo');
             }
-            return new Date(str); // fallback para ISO/outros formatos
+            return moment.tz(str, 'America/Sao_Paulo'); // fallback
         }
 
         const evento = {
             summary: titulo,
             description: descricao,
             start: {
-                dateTime: parseDateBR(dataInicio).toISOString(),
+                dateTime: parseDate(dataInicio).format(),
                 timeZone: 'America/Sao_Paulo',
             },
             end: {
-                dateTime: parseDateBR(dataFim).toISOString(),
+                dateTime: parseDate(dataFim).format(),
                 timeZone: 'America/Sao_Paulo',
             }
         };
@@ -493,8 +493,8 @@ function formatarEventos(eventos, titulo = '📅 *Próximos Eventos:*\n\n') {
     eventos.forEach((evento, index) => {
         const inicio = new Date(evento.start.dateTime || evento.start.date);
         mensagem += `${index + 1}. *${evento.summary}*\n`;
-        mensagem += `📆 ${inicio.toLocaleDateString('pt-BR')}\n`;
-        mensagem += `⏰ ${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}\n`;
+        mensagem += `📆 ${inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
+        mensagem += `⏰ ${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}\n`;
         if (evento.location) mensagem += `📍 ${evento.location}\n`;
         if (evento.description) mensagem += `📝 ${evento.description}\n`;
         mensagem += '\n';
