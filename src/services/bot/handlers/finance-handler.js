@@ -30,7 +30,7 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
 
             const result = await tracker.addExpense(valor, categoria, descricao);
             if (!result.error) {
-                respostaFinal = \`✅ Gasto anotado!\n💸 Valor: \${formatarMoeda(valor)}\n📍 Categoria: \${categoria}\n📑 Detalhes: \${descricao}\n\n*Classificação:* \${result.transaction.necessity.label} \`;
+                respostaFinal = `✅ Gasto anotado!\n💸 Valor: ${formatarMoeda(valor)}\n📍 Categoria: ${categoria}\n📑 Detalhes: ${descricao}\n\n*Classificação:* ${result.transaction.necessity.label} `;
             } else {
                 respostaFinal = '❌ Erro ao registrar seu gasto.';
             }
@@ -42,7 +42,7 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
 
             const result = await tracker.addIncome(valor, categoria, descricao);
             if (!result.error) {
-                respostaFinal = \`✅ Receita anotada!\n💰 Valor: \${formatarMoeda(valor)}\n📍 Categoria: \${categoria}\n📑 Detalhes: \${descricao}\`;
+                respostaFinal = `✅ Receita anotada!\n💰 Valor: ${formatarMoeda(valor)}\n📍 Categoria: ${categoria}\n📑 Detalhes: ${descricao}`;
             } else {
                 respostaFinal = '❌ Erro ao registrar receita.';
             }
@@ -51,14 +51,14 @@ async function handleFinanceCommand(client, chatId, respostaIA) {
             const resumo = await tracker.getMonthSummary();
             
             if (resumo) {
-                let text = \`📊 *Resumo Financeiro (\${resumo.month})*\n\n\` +
-                           \`💰 *Receitas:* \${formatarMoeda(resumo.totalIncome)}\n\` +
-                           \`💸 *Despesas:* \${formatarMoeda(resumo.totalExpenses)}\n\` +
-                           \`🏦 *Saldo:* \${formatarMoeda(resumo.balance)}\n\n\` +
-                           \`*Maiores Gastos:*\n\`;
+                let text = `📊 *Resumo Financeiro (${resumo.month})*\n\n` +
+                           `💰 *Receitas:* ${formatarMoeda(resumo.totalIncome)}\n` +
+                           `💸 *Despesas:* ${formatarMoeda(resumo.totalExpenses)}\n` +
+                           `🏦 *Saldo:* ${formatarMoeda(resumo.balance)}\n\n` +
+                           `*Maiores Gastos:*\n`;
                 
                 resumo.topCategories.forEach(cat => {
-                    text += \`• \${cat.category}: \${formatarMoeda(cat.amount)}\n\`;
+                    text += `• ${cat.category}: ${formatarMoeda(cat.amount)}\n`;
                 });
                 
                 respostaFinal = text;
