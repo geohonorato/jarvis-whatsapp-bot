@@ -23,7 +23,7 @@ const groqClient = axios.create({
 
 // Configurações do modelo
 const defaultOptions = {
-    model: "llama-3.3-70b-versatile", // Modelo versátil primário da Groq (melhor limite de cota)
+    model: "deepseek-r1-distill-llama-70b", // Agora estamos oficialmente injetando o raciocínio r1 do DeepSeek pela Groq
     temperature: 0.6,
     max_tokens: 8192,
     top_p: 1,

@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 
-const VAULT_PATH = 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault';
+const VAULT_PATH = process.env.VAULT_PATH || (
+    process.platform === 'win32' 
+        ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
+        : '/home/ubuntu/obsidian-vault'
+);
 
 const DEFAULT_FILES = [
     'GEMINI.md',
