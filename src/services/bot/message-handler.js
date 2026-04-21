@@ -1,15 +1,15 @@
 const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat/chat-history');
-const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq'); // Usa Groq/DeepSeek
-const { readCoreVaultContext, readSpecificNote } = require('../knowledge/obsidian-reader');
+const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
+const { buildSmartContext } = require('../knowledge/obsidian-reader');
 
-// Handlers especializados restantes
+// Handlers especializados
 const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
 const { isFinanceCommand, handleFinanceCommand } = require('./handlers/finance-handler');
 const { handleCalendarCommand, isCalendarCommand } = require('./handlers/calendar-handler');
 
 async function handleMessage(msg, client) {
     try {
-        const chatId = msg.from; // No formato internacional recebido do webhook
+        const chatId = msg.from;
         const lowerCaseBody = msg.body?.toLowerCase() || '';
         const hasText = !!msg.body;
 
@@ -25,17 +25,18 @@ async function handleMessage(msg, client) {
             return;
         }
 
-        console.log('\\n📩 Mensagem de texto processando:', msg.body);
+        console.log('\n📩 Mensagem de texto processando:', msg.body);
 
         let partsEntrada = [{ text: msg.body }];
         adicionarAoHistorico(chatId, 'user', partsEntrada);
 
         const historico = obterHistorico(chatId);
         
-        // --- OBSIDIAN RAG NA VEIA (Leitura Direta) ---
-        // Aqui não usamos embeddings super pesados, apenas injetamos CLAUDE.md e Maps vitais no inicio
-        const coreVault = readCoreVaultContext();
-        let promptText = `${coreVault}\n\nMENSAGEM DO USUÁRIO:\n${msg.body}`;
+        // --- RAG INTELIGENTE (só injeta o que a mensagem precisa) ---
+        const smartContext = buildSmartContext(msg.body);
+        let promptText = smartContext 
+            ? `${smartContext}\nMENSAGEM DO USUÁRIO:\n${msg.body}`
+            : msg.body;
         
         const textoComContexto = [{ text: promptText }];
 
@@ -86,7 +87,7 @@ async function handleMessage(msg, client) {
         }
 
     } catch (error) {
-        console.error('\\n❌ Erro não tratado no evento de mensagem:', error);
+        console.error('\n❌ Erro não tratado no evento de mensagem:', error);
         try {
             await client.sendMessage(msg.from, '❌ Ops! Ocorreu um erro inesperado. Tente novamente mais tarde.');
         } catch (sendError) {}
