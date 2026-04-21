@@ -16,6 +16,7 @@ token.json
 # WhatsApp session data
 data/.wwebjs_auth/
 data/.wwebjs_cache/
+data/auth_baileys/
 
 # Temporary files
 temp/

@@ -12,27 +12,18 @@ dirs.forEach(dir => {
 });
 
 // Importa e inicializa o nosso banco SQLite e Módulos
-console.log("🚀 Iniciando Jarvis Cloud Bot na OCI...");
+console.log("🚀 Iniciando Jarvis Cloud Bot na OCI (Versão Baileys)...");
 require('./services/finance/finance-tracker'); // Executa a iniciação do banco finance.db
 
-// App do Webhook
-const app = require('./services/bot/webhook-server');
+// Inicializa Conexão WhatsApp via Baileys
+const { connectToWhatsApp } = require('./services/bot/baileys');
 
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(\`🌐 Webhook Server rodando na porta \${PORT}\`);
-    console.log(\`✅ Rota de verificação: GET /webhook\`);
-    console.log(\`✅ Rota de eventos: POST /webhook\`);
-});
-
-// Heath Check endpoint for Cloud Providers
-app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'ok', uptime: process.uptime() });
+connectToWhatsApp().catch(err => {
+    console.error("❌ Falha crítica na inicialização do Baileys:", err);
 });
 
 setInterval(() => {
-    console.log(\`💓 Heartbeat | uptime=\${process.uptime().toFixed(0)}s | memory=\${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB\`);
+    console.log(`💓 Heartbeat | uptime=${process.uptime().toFixed(0)}s | memory=${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
 }, 60000);
 
 process.on('uncaughtException', (err) => {
