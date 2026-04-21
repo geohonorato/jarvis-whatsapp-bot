@@ -35,7 +35,7 @@ async function handleMessage(msg, client) {
         // --- OBSIDIAN RAG NA VEIA (Leitura Direta) ---
         // Aqui não usamos embeddings super pesados, apenas injetamos CLAUDE.md e Maps vitais no inicio
         const coreVault = readCoreVaultContext();
-        let promptText = \`\${coreVault}\n\nMENSAGEM DO USUÁRIO:\n\${msg.body}\`;
+        let promptText = `${coreVault}\n\nMENSAGEM DO USUÁRIO:\n${msg.body}`;
         
         const textoComContexto = [{ text: promptText }];
 
