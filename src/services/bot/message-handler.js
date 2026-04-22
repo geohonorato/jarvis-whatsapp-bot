@@ -1,6 +1,7 @@
 const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat/chat-history');
 const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
 const { buildSmartContext } = require('../knowledge/obsidian-reader');
+const ragService = require('../rag/rag-service');
 
 // Handlers especializados
 const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
@@ -32,17 +33,34 @@ async function handleMessage(msg, client) {
 
         const historico = obterHistorico(chatId);
         
-        // --- RAG INTELIGENTE (só injeta o que a mensagem precisa) ---
+        // --- CONTEXTO INTELIGENTE (3 camadas) ---
+        let contextParts = [];
+
+        // Camada 1: Perfil condensado + keywords do Obsidian
         const smartContext = buildSmartContext(msg.body);
-        let promptText = smartContext 
-            ? `${smartContext}\nMENSAGEM DO USUÁRIO:\n${msg.body}`
+        if (smartContext) contextParts.push(smartContext);
+
+        // Camada 2: Busca vetorial nas memórias (RAG real)
+        try {
+            const memorias = await ragService.buscarContexto(msg.body);
+            if (memorias.length > 0) {
+                const memText = memorias.map(m => `• ${m.text}`).join('\n');
+                contextParts.push(`=== MEMÓRIAS RELEVANTES ===\n${memText}`);
+            }
+        } catch (e) {
+            console.error('⚠️ RAG search falhou:', e.message);
+        }
+
+        // Monta prompt final
+        let promptText = contextParts.length > 0
+            ? `${contextParts.join('\n\n')}\n\nMENSAGEM DO USUÁRIO:\n${msg.body}`
             : msg.body;
         
         const textoComContexto = [{ text: promptText }];
 
-        console.time('🤖 Tempo API DeepSeek/Groq');
+        console.time('🤖 Tempo API');
         const respostaIA = await processarMensagemMultimodal(textoComContexto, historico);
-        console.timeEnd('🤖 Tempo API DeepSeek/Groq');
+        console.timeEnd('🤖 Tempo API');
 
         if (respostaIA && !respostaIA.startsWith('❌')) {
             let respostaFinal = respostaIA;
@@ -80,6 +98,10 @@ async function handleMessage(msg, client) {
                 console.log('🤖 Resposta enviada:', respostaFinal);
                 await client.sendMessage(chatId, respostaFinal);
             }
+
+            // Camada 3 (background): Extrai fatos e memoriza
+            ragService.extrairEMemorizar(msg.body, respostaFinal, chatId).catch(() => {});
+
         } else {
             const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';
             await client.sendMessage(chatId, mensagemErro);

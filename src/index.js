@@ -15,6 +15,20 @@ dirs.forEach(dir => {
 console.log("🚀 Iniciando Jarvis Cloud Bot na OCI (Versão Baileys)...");
 require('./services/finance/finance-tracker'); // Executa a iniciação do banco finance.db
 
+// Inicializa RAG vetorial e indexação do Vault
+const ragService = require('./services/rag/rag-service');
+const { indexarVault } = require('./services/rag/vault-indexer');
+
+ragService.initialize().then(() => {
+    // Indexa o vault na primeira subida (background)
+    indexarVault().catch(e => console.error('⚠️ Indexação inicial falhou:', e.message));
+    
+    // Re-indexa a cada 1 hora
+    setInterval(() => {
+        indexarVault().catch(e => console.error('⚠️ Re-indexação falhou:', e.message));
+    }, 60 * 60 * 1000);
+});
+
 // Inicializa Conexão WhatsApp via Baileys
 const { connectToWhatsApp } = require('./services/bot/baileys');
 
