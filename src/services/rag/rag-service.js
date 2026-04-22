@@ -156,6 +156,35 @@ class RagService {
         }
     }
 
+    _syncToObsidian(fact, dateObj = new Date()) {
+        try {
+            const vaultPath = process.env.OBSIDIAN_VAULT_PATH;
+            if (!vaultPath) return;
+
+            const cloneDir = path.join(vaultPath, '20 - Áreas', 'Clone Digital');
+            const fatosFile = path.join(cloneDir, 'Fatos do Jarvis.md');
+
+            const pad = (n) => n.toString().padStart(2, '0');
+            const dataStr = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+            
+            const bullet = `- **[${dataStr}]**: ${fact}\n`;
+
+            if (!fs.existsSync(cloneDir)) {
+                fs.mkdirSync(cloneDir, { recursive: true });
+            }
+
+            if (!fs.existsSync(fatosFile)) {
+                const header = `---\nname: Fatos do Jarvis\ndescription: Base de conhecimento permanente extraída automaticamente de conversas\ntype: memórias\n---\n\n# 🧠 Fatos do Jarvis\n\n> Base de conhecimento permanente extraída passivamente das conversas.\n\n`;
+                fs.writeFileSync(fatosFile, header, 'utf-8');
+            }
+
+            fs.appendFileSync(fatosFile, bullet, 'utf-8');
+            console.log(`📝 [RAG] Fato sincronizado com Obsidian: ${fact.substring(0, 30)}...`);
+        } catch (e) {
+            console.error('❌ Erro ao sincronizar com Obsidian:', e.message);
+        }
+    }
+
     /**
      * Extrai fatos permanentes da conversa e memoriza (background)
      */
@@ -208,11 +237,15 @@ Responda APENAS JSON: [{"fact": "texto"}] ou []`
 
             for (const item of facts) {
                 if (item.fact && item.fact.length > 5) {
-                    await this.adicionarMemoria(item.fact, {
+                    const dateObj = new Date();
+                    const added = await this.adicionarMemoria(item.fact, {
                         source: 'auto_extractor',
                         chatId,
-                        date: new Date().toISOString()
+                        date: dateObj.toISOString()
                     });
+                    if (added) {
+                        this._syncToObsidian(item.fact, dateObj);
+                    }
                 }
             }
         } catch (e) {
