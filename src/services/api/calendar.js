@@ -464,8 +464,7 @@ async function listarEventosParaDeletar(auth, data) {
 
 
 function formatarEventosData(eventos, data) {
-    const dataObj = new Date(data);
-    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    const dataFormatada = moment.tz(data, 'America/Sao_Paulo').format('DD/MM/YYYY');
 
     if (!eventos || eventos.length === 0) {
         return `📅 Não há eventos programados para ${dataFormatada}.`;
@@ -473,9 +472,9 @@ function formatarEventosData(eventos, data) {
 
     let mensagem = `📅 *Eventos para ${dataFormatada}:*\n\n`;
     eventos.forEach((evento, index) => {
-        const inicio = new Date(evento.start.dateTime || evento.start.date);
+        const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
         mensagem += `${index + 1}. *${evento.summary}*\n`;
-        mensagem += `⏰ ${inicio.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
+        mensagem += `⏰ ${inicio.format('HH:mm')}\n`;
         if (evento.description) mensagem += `📝 ${evento.description}\n`;
         if (evento.location) mensagem += `📍 ${evento.location}\n`;
         mensagem += '\n';
@@ -491,10 +490,10 @@ function formatarEventos(eventos, titulo = '📅 *Próximos Eventos:*\n\n') {
 
     let mensagem = titulo;
     eventos.forEach((evento, index) => {
-        const inicio = new Date(evento.start.dateTime || evento.start.date);
+        const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
         mensagem += `${index + 1}. *${evento.summary}*\n`;
-        mensagem += `📆 ${inicio.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n`;
-        mensagem += `⏰ ${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}\n`;
+        mensagem += `📆 ${inicio.format('DD/MM/YYYY')}\n`;
+        mensagem += `⏰ ${inicio.format('HH:mm')}\n`;
         if (evento.location) mensagem += `📍 ${evento.location}\n`;
         if (evento.description) mensagem += `📝 ${evento.description}\n`;
         mensagem += '\n';

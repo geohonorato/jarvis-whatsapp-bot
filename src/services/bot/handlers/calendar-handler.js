@@ -3,6 +3,7 @@
  * Extraído de message-handler.js para melhor organização
  */
 
+const moment = require('moment-timezone');
 const {
     getGoogleAuth,
     listarEventos,
@@ -105,13 +106,13 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                         const evento = await adicionarEvento(auth, eventoInfo, targetCalendar);
                         comandoExecutado = true;
 
-                        const inicio = new Date(evento.start.dateTime || evento.start.date);
-                        const fim = new Date(evento.end.dateTime || evento.end.date);
+                        const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
+                        const fim = moment.tz(evento.end.dateTime || evento.end.date, 'America/Sao_Paulo');
                         const calLabel = isGroup ? 'PASCOM ⛪' : 'Pessoal';
                         mensagemResposta = `> *Evento ${calLabel} Adicionado* ✨\n\n` +
                             `📝 *${evento.summary}*\n` +
-                            `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
-                            `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                            `📅 Início: ${inicio.format('DD/MM/YYYY HH:mm')}\n` +
+                            `🔚 Fim: ${fim.format('DD/MM/YYYY HH:mm')}\n` +
                             (evento.description ? `📋 ${evento.description}\n` : '') +
                             (evento.location ? `📍 ${evento.location}\n` : '');
                     } catch (error) {
@@ -131,13 +132,13 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                     const evento = await adicionarEvento(auth, eventoInfo, targetCalendarAdd);
                     comandoExecutado = true;
 
-                    const inicio = new Date(evento.start.dateTime || evento.start.date);
-                    const fim = new Date(evento.end.dateTime || evento.end.date);
+                    const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
+                    const fim = moment.tz(evento.end.dateTime || evento.end.date, 'America/Sao_Paulo');
                     const calLabel = isGroupAdd ? 'PASCOM ⛪' : 'Pessoal';
                     mensagemResposta = `> *Evento ${calLabel} Adicionado* ✨\n\n` +
                         `📝 *${evento.summary}*\n` +
-                        `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
-                        `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                        `📅 Início: ${inicio.format('DD/MM/YYYY HH:mm')}\n` +
+                        `🔚 Fim: ${fim.format('DD/MM/YYYY HH:mm')}\n` +
                         (evento.description ? `📋 ${evento.description}\n` : '') +
                         (evento.location ? `📍 ${evento.location}\n` : '');
                 } catch (error) {
@@ -152,12 +153,12 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                     const evento = await adicionarEvento(auth, eventoInfo, PASCOM_CALENDAR_ID);
                     comandoExecutado = true;
 
-                    const inicio = new Date(evento.start.dateTime || evento.start.date);
-                    const fim = new Date(evento.end.dateTime || evento.end.date);
+                    const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
+                    const fim = moment.tz(evento.end.dateTime || evento.end.date, 'America/Sao_Paulo');
                     mensagemResposta = `> *Evento PASCOM Adicionado* ⛪✨\n\n` +
                         `📝 *${evento.summary}*\n` +
-                        `📅 Início: ${inicio.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
-                        `🔚 Fim: ${fim.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}\n` +
+                        `📅 Início: ${inicio.format('DD/MM/YYYY HH:mm')}\n` +
+                        `🔚 Fim: ${fim.format('DD/MM/YYYY HH:mm')}\n` +
                         (evento.description ? `📋 ${evento.description}\n` : '') +
                         (evento.location ? `📍 ${evento.location}\n` : '');
                 } catch (error) {
@@ -256,8 +257,8 @@ async function handleCalendarCommand(client, chatId, respostaIA) {
                 if (eventosHoje && eventosHoje.length > 0) {
                     let listaParaRemover = "Qual evento você gostaria de remover? Responda com o número:\n\n";
                     eventosHoje.forEach((evento, index) => {
-                        const inicio = new Date(evento.start.dateTime || evento.start.date);
-                        listaParaRemover += `${index + 1}. *${evento.summary}* (${inicio.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })})\n`;
+                        const inicio = moment.tz(evento.start.dateTime || evento.start.date, 'America/Sao_Paulo');
+                        listaParaRemover += `${index + 1}. *${evento.summary}* (${inicio.format('HH:mm')})\n`;
                     });
                     mensagemResposta = listaParaRemover;
 
