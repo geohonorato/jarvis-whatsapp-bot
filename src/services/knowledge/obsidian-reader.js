@@ -67,6 +67,7 @@ function detectarNecessidadeRAG(mensagem) {
         { regex: /(?:identidade visual|brandbook|design system|marca.*cristo rei)/i, search: 'Identidade Visual' },
         { regex: /(?:próximos? passos?|pendências?|tarefas?.*pascom)/i, search: 'PROXIMOS_PASSOS' },
         { regex: /(?:o que temos? pra hoje|tarefas?|to.do|pendente)/i, search: '01 - Tarefas' },
+        { regex: /(?:o que|qual|quais|me fala|me conta|explica|resuma?).+(?:fatos|memórias|sobre mim|anotado|lembra)/i, search: 'Fatos do Jarvis' },
         { regex: /(?:mapa|estrutura|organização).*(?:vault|obsidian|notas)/i, search: '00 - Mapa' },
     ];
 
