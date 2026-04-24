@@ -158,7 +158,11 @@ class RagService {
 
     _syncToObsidian(fact, dateObj = new Date()) {
         try {
-            const vaultPath = process.env.OBSIDIAN_VAULT_PATH;
+            const vaultPath = process.env.OBSIDIAN_VAULT_PATH || process.env.VAULT_PATH || (
+                process.platform === 'win32' 
+                    ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
+                    : '/home/ubuntu/obsidian-vault'
+            );
             if (!vaultPath) return;
 
             const cloneDir = path.join(vaultPath, '20 - Áreas', 'Clone Digital');
