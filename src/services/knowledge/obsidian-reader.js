@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const VAULT_PATH = process.env.VAULT_PATH || (
+const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || process.env.VAULT_PATH || (
     process.platform === 'win32' 
         ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
         : '/home/ubuntu/obsidian-vault'
