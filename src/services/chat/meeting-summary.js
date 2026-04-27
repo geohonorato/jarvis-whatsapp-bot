@@ -4,14 +4,14 @@
  * Responsável por:
  * 1. Classificar áudios (conversa casual vs reunião/aula/palestra)
  * 2. Gerar resumos estruturados de reuniões
- * 3. Criar páginas no Notion com resumo + transcrição
+ * 3. Salvar notas no Obsidian Vault com Wikilinks
  */
 
 const { processarComGenerativeAI: processarComGroq } = require('../api/gemini');
 const fs = require('fs');
 const path = require('path');
 
-const VAULT_PATH = process.env.VAULT_PATH || (
+const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || process.env.VAULT_PATH || (
     process.platform === 'win32' 
         ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
         : '/home/ubuntu/obsidian-vault'
@@ -412,31 +412,10 @@ ${transcription}
 }
 
 /**
- * Cria a estrutura completa no Notion:
- * 1. Encontra a melhor página pai
- * 2. Cria página principal com resumo
- * 3. Cria sub-página com transcrição completa
- * 
- * @param {string} summary - Resumo formatado da reunião
- * @param {string} transcription - Transcrição completa
- * @param {object} metadata - {title, emoji, category, type, mainTopics}
- * @returns {Promise<{success: boolean, pageUrl?: string, title?: string, parentTitle?: string, error?: string}>}
- */
-async function createMeetingInNotion(summary, transcription, metadata) {
-            parentTitle: parentTitle || 'Raiz do workspace'
-        };
-
-    } catch (error) {
-        console.error('❌ [MeetingSummary] Erro ao criar reunião no Notion:', error.message);
-        return { success: false, error: error.message };
-    }
-}
-
-/**
- * Pipeline completo: transcreve → classifica → resume → salva no Notion
+ * Pipeline completo: classifica → resume → salva no Obsidian Vault
  * 
  * @param {string} transcription - Transcrição do áudio (já feita pelo Gemini)
- * @returns {Promise<{type: string, summary?: string, notionUrl?: string, notionTitle?: string, parentFolder?: string}>}
+ * @returns {Promise<{type: string, summary?: string, obsidianPath?: string, obsidianTitle?: string, folder?: string}>}
  */
 async function processAudioForMeeting(transcription) {
     // 1. Classifica
