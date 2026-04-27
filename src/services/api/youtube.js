@@ -1,6 +1,6 @@
 require("dotenv").config();
 const { YoutubeTranscript } = require('youtube-transcript');
-const { processarMensagemMultimodal } = require('./gemini');
+const { processarMensagemMultimodal } = require('./groq');
 
 /**
  * Busca a transcrição de um vídeo do YouTube e a resume usando o Gemini.
