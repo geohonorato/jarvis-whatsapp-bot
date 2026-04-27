@@ -40,6 +40,7 @@ async function handleTextMeeting(client, chatId, text) {
             title: titleData.title || 'Reunião',
             emoji: titleData.emoji || '📋',
             category: titleData.category || 'Outro',
+            path: titleData.path || '90 - Arquivos/Inbox',
             type: 'meeting',
             mainTopics: []
         };

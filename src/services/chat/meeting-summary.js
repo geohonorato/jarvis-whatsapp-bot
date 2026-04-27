@@ -95,11 +95,27 @@ TRANSCRIÇÃO:
 const TITLE_PROMPT = `Com base nesta transcrição de reunião/aula, gere:
 1. Um título curto e descritivo (máximo 60 caracteres)
 2. Um emoji adequado para representar o conteúdo
+3. O caminho da pasta (path) mais adequado dentro do Vault seguindo o método PARA.
+
+ESTRUTURA DO VAULT:
+- 10 - Projetos/Jarvis
+- 10 - Projetos/SIQMA
+- 20 - Áreas/Pascom
+- 20 - Áreas/Coroinhas
+- 20 - Áreas/Clone Digital
+- 30 - Recursos/Estudos/Engenharia
+- 90 - Arquivos/Inbox (Use se não houver um local melhor)
+
+REGRAS DE PASTA:
+- Se for sobre a Pascom (artes, redes sociais, comunicados paroquiais), use "20 - Áreas/Pascom/Reuniões".
+- Se for sobre Coroinhas (acólitos, liturgia, serviço do altar), use "20 - Áreas/Coroinhas/Reuniões".
+- Se for sobre engenharia/estudos, use "30 - Recursos/Estudos/Engenharia/Reuniões".
+- Se for sobre o Jarvis/bot, use "10 - Projetos/Jarvis/Reuniões".
+- Se for sobre o SIQMA, use "10 - Projetos/SIQMA/Reuniões".
+- Se não tiver certeza ou for genérico, use "90 - Arquivos/Inbox".
 
 Responda APENAS com JSON (sem markdown):
-{"title": "Título da Reunião", "emoji": "📋", "category": "categoria_sugerida"}
-
-Categorias possíveis: Trabalho, Estudo, Projeto, Pessoal, Igreja, Planejamento, Tecnologia, Saúde, Finanças, Outro
+{"title": "Título da Reunião", "emoji": "📋", "category": "categoria_sugerida", "path": "caminho/da/pasta"}
 
 TRANSCRIÇÃO (primeiros 2000 caracteres):
 `;
@@ -185,9 +201,9 @@ async function generateMeetingSummary(transcription) {
 }
 
 /**
- * Gera título e emoji para a reunião
+ * Gera título, emoji e caminho para a reunião
  * @param {string} transcription - Texto transcrito
- * @returns {Promise<{title: string, emoji: string, category: string}>}
+ * @returns {Promise<{title: string, emoji: string, category: string, path: string}>}
  */
 async function generateTitle(transcription) {
     try {
@@ -206,10 +222,10 @@ async function generateTitle(transcription) {
             console.warn('⚠️ Falha ao parsear título:', e.message);
         }
 
-        return { title: 'Reunião sem título', emoji: '📋', category: 'Outro' };
+        return { title: 'Reunião sem título', emoji: '📋', category: 'Outro', path: '90 - Arquivos/Inbox' };
     } catch (error) {
         console.error('❌ Erro ao gerar título:', error.message);
-        return { title: 'Reunião sem título', emoji: '📋', category: 'Outro' };
+        return { title: 'Reunião sem título', emoji: '📋', category: 'Outro', path: '90 - Arquivos/Inbox' };
     }
 }
 
@@ -361,11 +377,13 @@ async function createMeetingInObsidian(summary, transcription, metadata) {
         const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 50);
         const fileName = `${dataAtual}-${horaAtual}-${safeTitle}.md`;
 
-        // Determina a pasta com base na categoria
-        let folder = '90 - Arquivos/Inbox'; // Default
-        if (category.toLowerCase().includes('pascom')) folder = '20 - Áreas/Pascom/Reuniões';
-        if (category.toLowerCase().includes('coroinha') || category.toLowerCase().includes('estudo')) folder = '20 - Áreas/Coroinhas/Reuniões';
-        if (category.toLowerCase().includes('projeto')) folder = '10 - Projetos/Reuniões';
+        // Determina a pasta com base na sugestão da IA ou categoria
+        let folder = metadata.path || '90 - Arquivos/Inbox';
+        
+        // Sanitização e validação simples da pasta
+        if (folder.includes('..') || folder.startsWith('/') || folder.startsWith('\\')) {
+            folder = '90 - Arquivos/Inbox';
+        }
 
         const fullFolderPath = path.join(VAULT_PATH, folder);
         if (!fs.existsSync(fullFolderPath)) {
@@ -445,6 +463,7 @@ async function processAudioForMeeting(transcription) {
         title: titleData.title || classification.suggestedTitle || 'Reunião',
         emoji: titleData.emoji || '📋',
         category: titleData.category || 'Outro',
+        path: titleData.path || '90 - Arquivos/Inbox',
         type: classification.type,
         mainTopics: classification.mainTopics || []
     };
