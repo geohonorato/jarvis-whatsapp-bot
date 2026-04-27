@@ -506,6 +506,7 @@ function isMeetingEndRequest(text) {
         /finaliza?\s+(?:a\s*)?reuni[ãa]o/,
         /acabou\s+(?:a\s*)?reuni[ãa]o/,
         /conclui?\s+(?:a\s*)?reuni[ãa]o/,
+        /fim\s+da\s+reuni[ãa]o/,
     ];
     return patterns.some(p => p.test(lower)) || isMeetingSaveRequest(text);
 }
@@ -517,12 +518,12 @@ function isMeetingSaveRequest(text) {
     if (!text) return false;
     const lower = text.toLowerCase();
     const patterns = [
-        /salva?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
-        /registra?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
-        /anota?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
-        /salva?\s+(?:isso|tudo)?\s*no\s*vault/,
-        /cria?\s+(?:uma?\s*)?nota\s+(?:de\s+)?reuni[ãa]o/,
-        /salva?\s+(?:essa|esta)?\s*(?:ata|nota)\s+no\s*vault/,
+        /salv[ae]r?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /registr[ae]r?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /anot[ae]r?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /salv[ae]r?\s+(?:isso|tudo)?\s*no\s*vault/,
+        /cri[ae]r?\s+(?:uma?\s*)?nota\s+(?:de\s+)?reuni[ãa]o/,
+        /salv[ae]r?\s+(?:essa|esta)?\s*(?:ata|nota)\s+no\s*vault/,
     ];
     return patterns.some(p => p.test(lower));
 }
