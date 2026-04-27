@@ -169,9 +169,8 @@ class RagService {
             const fatosFile = path.join(cloneDir, 'Fatos do Jarvis.md');
 
             const pad = (n) => n.toString().padStart(2, '0');
-            const dataStr = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
-            
-            const bullet = `- **[${dataStr}]**: ${fact}\n`;
+            const dataLink = `[[${dateObj.toISOString().split('T')[0]}]]`;
+            const bullet = `- **[${dataLink} ${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}]**: ${fact}\n`;
 
             if (!fs.existsSync(cloneDir)) {
                 fs.mkdirSync(cloneDir, { recursive: true });
@@ -206,11 +205,12 @@ class RagService {
                         content: `Extrator de fatos. Analise a conversa e extraia APENAS fatos PERMANENTES sobre o usuário.
 Regras:
 - Só informações duradouras (nome, profissão, hobbies, preferências, família)
+- Use [[Wikilinks]] para datas, nomes de áreas (Pascom, Coroinhas), projetos ou tecnologias mencionadas
 - NÃO extraia perguntas, humor, ou o que está fazendo agora
 - NÃO re-extraia o que o assistente já sabe
 - Separe cada fato individualmente
 - Se não houver fatos novos, retorne []
-Responda APENAS JSON: [{"fact": "texto"}] ou []`
+Responda APENAS JSON: [{"fact": "texto com [[Wikilinks]] se apropriado"}] ou []`
                     },
                     {
                         role: 'user',

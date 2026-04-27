@@ -132,24 +132,23 @@ async function sendMeetingResult(client, chatId, result) {
 
     if (result.summary) {
         const summaryForWhatsapp = result.summary.length > 3000
-            ? result.summary.substring(0, 3000) + '\n\n_(...resumo completo no Notion)_'
+            ? result.summary.substring(0, 3000) + '\n\n_(...resumo completo no Obsidian)_'
             : result.summary;
         responseMsg += summaryForWhatsapp;
     }
 
-    if (result.notionUrl) {
+    if (result.obsidianPath) {
         responseMsg += `\n\n━━━━━━━━━━━━━━━━━━━━\n`;
-        responseMsg += `📂 *Salvo no Notion:*\n`;
-        if (result.parentFolder) {
-            responseMsg += `📁 Pasta: _${result.parentFolder}_\n`;
+        responseMsg += `📁 *Salvo no Obsidian Vault:*\n`;
+        if (result.folder) {
+            responseMsg += `📂 Pasta: [[${result.folder}]]\n`;
         }
-        if (result.notionTitle) {
-            responseMsg += `📄 Página: _${result.notionTitle}_\n`;
+        if (result.obsidianTitle) {
+            responseMsg += `📄 Nota: [[${result.obsidianTitle}]]\n`;
         }
-        responseMsg += `🔗 ${result.notionUrl}\n`;
-        responseMsg += `\n_A transcrição completa está na sub-página dentro do resumo._`;
+        responseMsg += `\n_A nota contém o resumo e a transcrição completa com Wikilinks._`;
     } else if (result.error) {
-        responseMsg += `\n\n⚠️ _Não foi possível salvar no Notion: ${result.error}_`;
+        responseMsg += `\n\n⚠️ _Não foi possível salvar no Obsidian: ${result.error}_`;
     }
 
     await client.sendMessage(chatId, responseMsg);

@@ -8,7 +8,14 @@
  */
 
 const { processarComGenerativeAI: processarComGroq } = require('../api/gemini');
-const notionApi = require('../api/notion');
+const fs = require('fs');
+const path = require('path');
+
+const VAULT_PATH = process.env.VAULT_PATH || (
+    process.platform === 'win32' 
+        ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
+        : '/home/ubuntu/obsidian-vault'
+);
 
 // ============================================================
 // Prompts especializados
@@ -336,6 +343,75 @@ function transcriptionToNotionBlocks(transcription) {
 }
 
 /**
+ * Cria a nota de reunião diretamente no Obsidian Vault
+ * 
+ * @param {string} summary - Resumo formatado da reunião
+ * @param {string} transcription - Transcrição completa
+ * @param {object} metadata - {title, emoji, category, type, mainTopics}
+ * @returns {Promise<{success: boolean, filePath?: string, title?: string, error?: string}>}
+ */
+async function createMeetingInObsidian(summary, transcription, metadata) {
+    try {
+        const { title, category, type } = metadata;
+        const dataObjeto = new Date();
+        const dataAtual = dataObjeto.toISOString().split('T')[0];
+        const dataFormatada = dataObjeto.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+        const horaAtual = dataObjeto.toTimeString().split(':')[0] + '-' + dataObjeto.toTimeString().split(':')[1];
+        
+        const safeTitle = title.replace(/[^a-z0-9]/gi, '_').substring(0, 50);
+        const fileName = `${dataAtual}-${horaAtual}-${safeTitle}.md`;
+
+        // Determina a pasta com base na categoria
+        let folder = '90 - Arquivos/Inbox'; // Default
+        if (category.toLowerCase().includes('pascom')) folder = '20 - Áreas/Pascom/Reuniões';
+        if (category.toLowerCase().includes('coroinha') || category.toLowerCase().includes('estudo')) folder = '20 - Áreas/Coroinhas/Reuniões';
+        if (category.toLowerCase().includes('projeto')) folder = '10 - Projetos/Reuniões';
+
+        const fullFolderPath = path.join(VAULT_PATH, folder);
+        if (!fs.existsSync(fullFolderPath)) {
+            fs.mkdirSync(fullFolderPath, { recursive: true });
+        }
+
+        const filePath = path.join(fullFolderPath, fileName);
+
+        // Gera conteúdo com Wikilinks
+        const content = `---
+type: reunião
+category: [[${category}]]
+date: [[${dataAtual}]]
+source: jarvis
+---
+
+# ${metadata.emoji || '📋'} ${title}
+
+> Reunião registrada em [[${dataAtual}]] às ${horaAtual.replace('-', ':')}
+
+${summary.replace(/#+ /g, '## ')}
+
+---
+## 🎙️ Transcrição Completa
+${transcription}
+
+#reunião #jarvis #[[${category}]]
+`;
+
+        fs.writeFileSync(filePath, content, 'utf-8');
+        console.log(`✅ [MeetingSummary] Nota salva no Obsidian: ${filePath}`);
+
+        return {
+            success: true,
+            filePath: filePath,
+            title: title,
+            folder: folder
+        };
+
+    } catch (error) {
+        console.error('❌ [MeetingSummary] Erro ao salvar no Obsidian:', error.message);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
  * Cria a estrutura completa no Notion:
  * 1. Encontra a melhor página pai
  * 2. Cria página principal com resumo
@@ -347,154 +423,6 @@ function transcriptionToNotionBlocks(transcription) {
  * @returns {Promise<{success: boolean, pageUrl?: string, title?: string, parentTitle?: string, error?: string}>}
  */
 async function createMeetingInNotion(summary, transcription, metadata) {
-    try {
-        if (!notionApi.isReady()) {
-            return { success: false, error: 'Chave do Notion não configurada' };
-        }
-
-        const { title, emoji, category, type } = metadata;
-        const dataAtual = new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-        const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
-        const pageTitle = `${title} — ${dataAtual}`;
-
-        console.log(`📝 [MeetingSummary] Criando resumo no Notion: "${pageTitle}"`);
-
-        // 1. Busca a melhor página pai
-        const parentResult = await notionApi.findBestParentPage(category);
-        let parentPageId = null;
-        let parentTitle = null;
-
-        if (parentResult.success) {
-            parentPageId = parentResult.data.id;
-            parentTitle = parentResult.title;
-            console.log(`📂 [MeetingSummary] Página pai encontrada: "${parentTitle}" (${parentPageId})`);
-        } else {
-            console.warn('⚠️ [MeetingSummary] Nenhuma página pai encontrada, criando na raiz do workspace');
-        }
-
-        // 2. Cria a página principal do resumo
-        let mainPage;
-        if (parentPageId) {
-            mainPage = await notionApi.createChildPage(parentPageId, pageTitle, emoji || '📋');
-        } else {
-            // Fallback: cria como página standalone (precisa de um database ou parent)
-            // Tentamos criar como child de qualquer página encontrada
-            const fallbackSearch = await notionApi.search('');
-            if (fallbackSearch.success && fallbackSearch.data.length > 0) {
-                const firstPage = fallbackSearch.data.find(r => r.object === 'page');
-                if (firstPage) {
-                    mainPage = await notionApi.createChildPage(firstPage.id, pageTitle, emoji || '📋');
-                }
-            }
-            if (!mainPage) {
-                return { success: false, error: 'Não foi possível encontrar um local no Notion para criar a página' };
-            }
-        }
-
-        if (!mainPage.success) {
-            return { success: false, error: `Erro ao criar página: ${mainPage.error}` };
-        }
-
-        const mainPageId = mainPage.data.id;
-        const mainPageUrl = mainPage.data.url || notionApi.getPageUrl(mainPageId);
-
-        console.log(`✅ [MeetingSummary] Página principal criada: ${mainPageUrl}`);
-
-        // 3. Adiciona o conteúdo do resumo à página principal
-        const summaryBlocks = [];
-
-        // Header com metadados
-        summaryBlocks.push({
-            object: 'block',
-            type: 'callout',
-            callout: {
-                icon: { type: 'emoji', emoji: '📅' },
-                rich_text: [{
-                    type: 'text',
-                    text: { content: `Data: ${dataAtual} às ${horaAtual} • Tipo: ${type || 'Reunião'} • Categoria: ${category || 'Geral'}` }
-                }]
-            }
-        });
-
-        // Divisor
-        summaryBlocks.push({ object: 'block', type: 'divider', divider: {} });
-
-        // Blocos do resumo
-        const resumoBlocks = summaryToNotionBlocks(summary);
-        summaryBlocks.push(...resumoBlocks);
-
-        // Divisor antes do link da transcrição
-        summaryBlocks.push({ object: 'block', type: 'divider', divider: {} });
-
-        // Nota sobre a transcrição
-        summaryBlocks.push({
-            object: 'block',
-            type: 'callout',
-            callout: {
-                icon: { type: 'emoji', emoji: '🎙️' },
-                rich_text: [{
-                    type: 'text',
-                    text: { content: '📄 A transcrição completa do áudio está na sub-página abaixo.' },
-                    annotations: { italic: true }
-                }]
-            }
-        });
-
-        // Adiciona os blocos em lotes de 100 (limite da API do Notion)
-        const BATCH_SIZE = 100;
-        for (let i = 0; i < summaryBlocks.length; i += BATCH_SIZE) {
-            const batch = summaryBlocks.slice(i, i + BATCH_SIZE);
-            const appendResult = await notionApi.appendBlocks(mainPageId, batch);
-            if (!appendResult.success) {
-                console.error(`⚠️ [MeetingSummary] Erro ao adicionar blocos (lote ${i / BATCH_SIZE + 1}):`, appendResult.error);
-            }
-        }
-
-        // 4. Cria sub-página com a transcrição completa
-        const transcriptionPage = await notionApi.createChildPage(mainPageId, `🎙️ Transcrição Completa — ${title}`, '📝');
-
-        if (transcriptionPage.success) {
-            const transcriptionPageId = transcriptionPage.data.id;
-
-            // Header na transcrição
-            const transcriptionBlocks = [
-                {
-                    object: 'block',
-                    type: 'callout',
-                    callout: {
-                        icon: { type: 'emoji', emoji: 'ℹ️' },
-                        rich_text: [{
-                            type: 'text',
-                            text: { content: `Transcrição automática gerada em ${dataAtual} às ${horaAtual}.\nEsta transcrição pode conter imprecisões.` },
-                            annotations: { italic: true, color: 'gray' }
-                        }]
-                    }
-                },
-                { object: 'block', type: 'divider', divider: {} }
-            ];
-
-            // Blocos da transcrição
-            const contentBlocks = transcriptionToNotionBlocks(transcription);
-            transcriptionBlocks.push(...contentBlocks);
-
-            // Adiciona em lotes
-            for (let i = 0; i < transcriptionBlocks.length; i += BATCH_SIZE) {
-                const batch = transcriptionBlocks.slice(i, i + BATCH_SIZE);
-                const appendResult = await notionApi.appendBlocks(transcriptionPageId, batch);
-                if (!appendResult.success) {
-                    console.error(`⚠️ [MeetingSummary] Erro ao adicionar transcrição (lote ${i / BATCH_SIZE + 1}):`, appendResult.error);
-                }
-            }
-
-            console.log(`✅ [MeetingSummary] Transcrição adicionada como sub-página`);
-        } else {
-            console.error('⚠️ [MeetingSummary] Erro ao criar sub-página de transcrição:', transcriptionPage.error);
-        }
-
-        return {
-            success: true,
-            pageUrl: mainPageUrl,
-            title: pageTitle,
             parentTitle: parentTitle || 'Raiz do workspace'
         };
 
@@ -532,8 +460,8 @@ async function processAudioForMeeting(transcription) {
         return { type: classification.type, summary: null, error: summary };
     }
 
-    // 4. Salva no Notion
-    console.log('💾 [MeetingSummary] Salvando no Notion...');
+    // 4. Salva no Obsidian
+    console.log('💾 [MeetingSummary] Salvando no Obsidian Vault...');
     const metadata = {
         title: titleData.title || classification.suggestedTitle || 'Reunião',
         emoji: titleData.emoji || '📋',
@@ -542,15 +470,15 @@ async function processAudioForMeeting(transcription) {
         mainTopics: classification.mainTopics || []
     };
 
-    const notionResult = await createMeetingInNotion(summary, transcription, metadata);
+    const obsidianResult = await createMeetingInObsidian(summary, transcription, metadata);
 
     return {
         type: classification.type,
         summary,
-        notionUrl: notionResult.success ? notionResult.pageUrl : null,
-        notionTitle: notionResult.success ? notionResult.title : null,
-        parentFolder: notionResult.success ? notionResult.parentTitle : null,
-        error: notionResult.success ? null : notionResult.error
+        obsidianPath: obsidianResult.success ? obsidianResult.filePath : null,
+        obsidianTitle: obsidianResult.success ? obsidianResult.title : null,
+        folder: obsidianResult.success ? obsidianResult.folder : null,
+        error: obsidianResult.success ? null : obsidianResult.error
     };
 }
 
@@ -558,6 +486,6 @@ module.exports = {
     classifyAudio,
     generateMeetingSummary,
     generateTitle,
-    createMeetingInNotion,
+    createMeetingInObsidian,
     processAudioForMeeting
 };
