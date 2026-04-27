@@ -2,11 +2,70 @@ const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../ch
 const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
 const { buildSmartContext } = require('../knowledge/obsidian-reader');
 const ragService = require('../rag/rag-service');
+const { createMeetingInObsidian, generateTitle } = require('../chat/meeting-summary');
 
 // Handlers especializados
 const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
 const { isFinanceCommand, handleFinanceCommand } = require('./handlers/finance-handler');
 const { handleCalendarCommand, isCalendarCommand } = require('./handlers/calendar-handler');
+
+/**
+ * Detecta se o usuário está pedindo para salvar uma reunião/nota no vault via texto
+ */
+function isMeetingSaveRequest(text) {
+    const lower = text.toLowerCase();
+    const patterns = [
+        /salva?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /registra?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /anota?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /salva?\s+(?:isso|tudo)?\s*no\s*vault/,
+        /cria?\s+(?:uma?\s*)?nota\s+(?:de\s+)?reuni[ãa]o/,
+        /salva?\s+(?:essa|esta)?\s*(?:ata|nota)\s+no\s*vault/,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
+/**
+ * Processa uma reunião enviada como texto e salva no vault
+ */
+async function handleTextMeeting(client, chatId, text) {
+    try {
+        console.log('📋 [MeetingHandler] Reunião via texto detectada — processando...');
+        await client.sendMessage(chatId, '📝 _Processando reunião e salvando no vault..._');
+
+        // Gera título/categoria via IA
+        const titleData = await generateTitle(text);
+
+        const metadata = {
+            title: titleData.title || 'Reunião',
+            emoji: titleData.emoji || '📋',
+            category: titleData.category || 'Outro',
+            type: 'meeting',
+            mainTopics: []
+        };
+
+        // O texto do usuário já é o "resumo" — salva diretamente
+        const result = await createMeetingInObsidian(text, '', metadata);
+
+        if (result.success) {
+            let response = `✅ Reunião salva no Obsidian Vault!\n\n`;
+            response += `📁 Pasta: ${result.folder}\n`;
+            response += `📄 Nota: ${result.title}\n`;
+            response += `\n_A nota será sincronizada automaticamente._`;
+            await client.sendMessage(chatId, response);
+            adicionarAoHistorico(chatId, 'user', [{ text: `[Reunião salva via texto no vault]` }]);
+            adicionarAoHistorico(chatId, 'model', [{ text: response }]);
+        } else {
+            await client.sendMessage(chatId, `❌ Erro ao salvar reunião: ${result.error}`);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('❌ [MeetingHandler] Erro ao salvar reunião via texto:', error.message);
+        await client.sendMessage(chatId, `❌ Erro inesperado: ${error.message}`);
+        return true;
+    }
+}
 
 async function handleMessage(msg, client) {
     try {
@@ -27,6 +86,12 @@ async function handleMessage(msg, client) {
         }
 
         console.log('\n📩 Mensagem de texto processando:', msg.body);
+
+        // --- INTERCEPTOR: Reunião via texto ---
+        if (isMeetingSaveRequest(msg.body)) {
+            await handleTextMeeting(client, chatId, msg.body);
+            return;
+        }
 
         let partsEntrada = [{ text: msg.body }];
         adicionarAoHistorico(chatId, 'user', partsEntrada);
