@@ -172,6 +172,7 @@ iniciarLimpezaAutomatica();
 module.exports = {
     adicionarAoHistorico,
     obterHistorico,
+    obterHistoricoDesde,
     limparHistorico,
     limparHistoricosInativos,
     obterEstatisticas,
