@@ -7,7 +7,7 @@
  * 3. Salvar notas no Obsidian Vault com Wikilinks
  */
 
-const { processarComGenerativeAI: processarComGroq } = require('../api/gemini');
+const { processarComGroq } = require('../api/groq');
 const fs = require('fs');
 const path = require('path');
 
