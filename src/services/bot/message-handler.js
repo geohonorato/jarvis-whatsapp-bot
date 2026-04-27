@@ -1,8 +1,9 @@
-const { adicionarAoHistorico, obterHistorico, limparHistorico } = require('../chat/chat-history');
+const { adicionarAoHistorico, obterHistorico, limparHistorico, obterHistoricoDesde } = require('../chat/chat-history');
 const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
 const { buildSmartContext } = require('../knowledge/obsidian-reader');
 const ragService = require('../rag/rag-service');
-const { createMeetingInObsidian, generateTitle, isMeetingSaveRequest, consolidateMeetingNotes } = require('../chat/meeting-summary');
+const { createMeetingInObsidian, generateTitle, isMeetingSaveRequest, consolidateMeetingNotes, isMeetingStartRequest, isMeetingEndRequest } = require('../chat/meeting-summary');
+const sessionManager = require('./session-manager');
 
 // Handlers especializados
 const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
@@ -84,10 +85,29 @@ async function handleMessage(msg, client) {
 
         console.log('\n📩 Mensagem de texto processando:', msg.body);
 
-        // --- INTERCEPTOR: Reunião via texto ---
-        if (isMeetingSaveRequest(msg.body)) {
-            const historico = obterHistorico(chatId);
-            await handleTextMeeting(client, chatId, msg.body, historico);
+        // --- INTERCEPTOR: Início de Reunião ---
+        if (isMeetingStartRequest(msg.body)) {
+            await sessionManager.startMeeting(chatId);
+            const resp = '🚀 *Modo Reunião Ativado!*\n\nA partir de agora, vou acompanhar suas anotações. Você pode continuar conversando comigo normalmente; no fim, quando você pedir para encerrar, eu vou consolidar o que for importante para a nota do Vault.';
+            await client.sendMessage(chatId, resp);
+            adicionarAoHistorico(chatId, 'model', [{ text: resp }]);
+            return;
+        }
+
+        // --- INTERCEPTOR: Fim de Reunião (ou salvamento direto) ---
+        if (isMeetingEndRequest(msg.body)) {
+            const session = await sessionManager.getSession(chatId);
+            let historicoConsolidar = [];
+            
+            if (session.isMeetingActive) {
+                console.log('🏁 Encerrando reunião ativa e consolidando...');
+                historicoConsolidar = obterHistoricoDesde(chatId, session.meetingStartTime);
+                await sessionManager.endMeeting(chatId);
+            } else {
+                historicoConsolidar = obterHistorico(chatId);
+            }
+            
+            await handleTextMeeting(client, chatId, msg.body, historicoConsolidar);
             return;
         }
 

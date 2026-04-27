@@ -79,6 +79,24 @@ function obterHistorico(chatId) {
 }
 
 /**
+ * Obtém histórico do chat desde um timestamp específico
+ */
+function obterHistoricoDesde(chatId, startTime) {
+    const historico = chatHistory.get(chatId);
+    if (!historico) return [];
+
+    const filtered = historico.filter(msg => {
+        return msg.timestamp && msg.timestamp >= startTime;
+    });
+
+    return filtered.map(msg => ({
+        role: msg.role,
+        parts: msg.parts,
+        timestamp: msg.timestamp
+    }));
+}
+
+/**
  * Limpa histórico de um chat específico ou de todos
  */
 function limparHistorico(chatId) {

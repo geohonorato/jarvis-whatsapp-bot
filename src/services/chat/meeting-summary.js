@@ -481,6 +481,36 @@ async function processAudioForMeeting(transcription) {
 }
 
 /**
+ * Detecta se o texto é um pedido de INÍCIO de reunião
+ */
+function isMeetingStartRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const patterns = [
+        /inicia?\s+(?:uma?\s*)?reuni[ãa]o/,
+        /come[çc]a?\s+(?:uma?\s*)?reuni[ãa]o/,
+        /modo\s+reuni[ãa]o/,
+        /abrir\s+reuni[ãa]o/,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
+/**
+ * Detecta se o texto é um pedido de FIM de reunião (e salvamento)
+ */
+function isMeetingEndRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const patterns = [
+        /encerra?\s+(?:a\s*)?reuni[ãa]o/,
+        /finaliza?\s+(?:a\s*)?reuni[ãa]o/,
+        /acabou\s+(?:a\s*)?reuni[ãa]o/,
+        /conclui?\s+(?:a\s*)?reuni[ãa]o/,
+    ];
+    return patterns.some(p => p.test(lower)) || isMeetingSaveRequest(text);
+}
+
+/**
  * Detecta se o texto é um pedido de salvamento de reunião
  */
 function isMeetingSaveRequest(text) {
@@ -527,14 +557,17 @@ async function consolidateMeetingNotes(currentText, history) {
     const historicoFormatado = userMessages.join('\n---\n');
     
     const prompt = `Você é um assistente que organiza notas de reunião enviadas via mensagens curtas.
-Abaixo está o histórico de notas enviadas pelo usuário nesta sessão.
-Sua tarefa é consolidar todas as informações relevantes em um único texto estruturado, coerente e elegante, eliminando repetições.
-Mantenha o tom profissional e organize em tópicos se fizer sentido.
+Abaixo está o histórico de mensagens de uma sessão onde o "Modo Reunião" estava ativo.
+Sua tarefa é:
+1. Extrair todas as informações RELEVANTES (pautas, decisões, prazos, ações, participantes).
+2. Ignorar conversas casuais, testes ou perguntas técnicas feitas ao assistente (ex: buscas no vault, perguntas sobre o clima, comandos de chat).
+3. Consolidar tudo em um único texto estruturado, coerente e elegante.
+4. Manter o tom profissional e usar tópicos (bullet points) para facilitar a leitura.
 
-NOTAS DO USUÁRIO:
+HISTÓRICO DA SESSÃO:
 ${historicoFormatado}
 
-Texto Consolidado:`;
+Texto Consolidado (Foque apenas no conteúdo da reunião):`;
 
     try {
         const result = await processarMensagemMultimodal([{ text: prompt }], []);
@@ -552,5 +585,7 @@ module.exports = {
     createMeetingInObsidian,
     processAudioForMeeting,
     isMeetingSaveRequest,
+    isMeetingStartRequest,
+    isMeetingEndRequest,
     consolidateMeetingNotes
 };
