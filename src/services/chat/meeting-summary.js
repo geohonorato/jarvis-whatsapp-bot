@@ -480,10 +480,77 @@ async function processAudioForMeeting(transcription) {
     };
 }
 
+/**
+ * Detecta se o texto é um pedido de salvamento de reunião
+ */
+function isMeetingSaveRequest(text) {
+    if (!text) return false;
+    const lower = text.toLowerCase();
+    const patterns = [
+        /salva?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /registra?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /anota?\s+(?:essa|esta|a)?\s*reuni[ãa]o/,
+        /salva?\s+(?:isso|tudo)?\s*no\s*vault/,
+        /cria?\s+(?:uma?\s*)?nota\s+(?:de\s+)?reuni[ãa]o/,
+        /salva?\s+(?:essa|esta)?\s*(?:ata|nota)\s+no\s*vault/,
+    ];
+    return patterns.some(p => p.test(lower));
+}
+
+/**
+ * Consolida múltiplas mensagens do histórico em uma nota única
+ */
+async function consolidateMeetingNotes(currentText, history) {
+    const { processarMensagemMultimodal } = require('../api/groq');
+    
+    // Filtra apenas mensagens do usuário (ignorando o comando de salvamento)
+    // Pegamos apenas as últimas 20 mensagens para evitar contexto gigante
+    const recentHistory = history.slice(-20);
+    
+    const userMessages = recentHistory
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.parts.map(p => p.text).join(' '))
+        .filter(text => !isMeetingSaveRequest(text));
+    
+    // Adiciona o texto atual se ele tiver conteúdo útil além do comando
+    const cleanCurrent = currentText.replace(/jarvis/gi, '').replace(/salva/gi, '').replace(/reunião/gi, '').trim();
+    if (cleanCurrent.length > 5 && !isMeetingSaveRequest(currentText)) {
+        userMessages.push(currentText);
+    }
+
+    if (userMessages.length <= 1 && userMessages[0] === currentText) {
+        return currentText;
+    }
+
+    if (userMessages.length === 0) return currentText;
+
+    const historicoFormatado = userMessages.join('\n---\n');
+    
+    const prompt = `Você é um assistente que organiza notas de reunião enviadas via mensagens curtas.
+Abaixo está o histórico de notas enviadas pelo usuário nesta sessão.
+Sua tarefa é consolidar todas as informações relevantes em um único texto estruturado, coerente e elegante, eliminando repetições.
+Mantenha o tom profissional e organize em tópicos se fizer sentido.
+
+NOTAS DO USUÁRIO:
+${historicoFormatado}
+
+Texto Consolidado:`;
+
+    try {
+        const result = await processarMensagemMultimodal([{ text: prompt }], []);
+        return result && !result.startsWith('❌') ? result : userMessages.join('\n\n');
+    } catch (e) {
+        console.error('❌ Erro na consolidação:', e.message);
+        return userMessages.join('\n\n');
+    }
+}
+
 module.exports = {
     classifyAudio,
     generateMeetingSummary,
     generateTitle,
     createMeetingInObsidian,
-    processAudioForMeeting
+    processAudioForMeeting,
+    isMeetingSaveRequest,
+    consolidateMeetingNotes
 };
