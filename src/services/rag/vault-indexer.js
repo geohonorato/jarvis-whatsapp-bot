@@ -11,10 +11,7 @@ const VAULT_PATH = process.env.OBSIDIAN_VAULT_PATH || process.env.VAULT_PATH || 
 // Pastas ignoradas na indexação
 const IGNORE_DIRS = ['.git', '.obsidian', 'node_modules', '.agent', 'assets', '90 - Arquivos'];
 
-// Limite de tamanho por nota (notas muito grandes são condensadas)
-const MAX_NOTE_SIZE = 3000; // chars
-
-// Rastreia hashes pra não re-indexar notas inalteradas
+// Rastreia mtimes pra não re-indexar notas inalteradas
 const INDEX_STATE_FILE = path.join(__dirname, '../../../data/vault-index-state.json');
 let indexState = {};
 
@@ -74,32 +71,13 @@ async function indexarVault() {
         }
 
         try {
-            let content = fs.readFileSync(filePath, 'utf-8');
-            
-            // Ignora notas vazias ou muito pequenas
-            if (content.trim().length < 50) continue;
-            
-            // Condensar notas grandes: pega título + primeiras linhas
-            if (content.length > MAX_NOTE_SIZE) {
-                content = content.substring(0, MAX_NOTE_SIZE) + '...';
-            }
-
-            // Prefixar com o caminho pra dar contexto
-            const noteName = path.basename(filePath, '.md');
-            const textToIndex = `[NOTA: ${noteName}] ${content}`;
-
-            const added = await ragService.adicionarMemoria(textToIndex, {
-                source: 'obsidian_vault',
-                path: relativePath,
-                indexed: new Date().toISOString()
-            });
-
-            if (added) {
-                novas++;
-                indexState[relativePath] = mtime;
-            }
+            // Indexer apenas rastreia alterações do vault (mtime).
+            // Notas não vão mais para o banco vetorial — a busca semântica
+            // é feita pelo obsidian-reader.js sob demanda (keyword matching).
+            novas++;
+            indexState[relativePath] = mtime;
         } catch (e) {
-            console.error(`❌ [Indexer] Erro ao indexar ${relativePath}:`, e.message);
+            console.error(`❌ [Indexer] Erro ao rastrear ${relativePath}:`, e.message);
         }
     }
 
