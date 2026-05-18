@@ -4,11 +4,13 @@ const { buildSmartContext } = require('../knowledge/obsidian-reader');
 const ragService = require('../rag/rag-service');
 const { createMeetingInObsidian, generateTitle, isMeetingSaveRequest, consolidateMeetingNotes, isMeetingStartRequest, isMeetingEndRequest } = require('../chat/meeting-summary');
 const sessionManager = require('./session-manager');
+const cloneDigital = require('../knowledge/clone-digital');
 
 // Handlers especializados
 const { handleMagisteriumCommand } = require('./handlers/magisterium-handler');
 const { isFinanceCommand, handleFinanceCommand } = require('./handlers/finance-handler');
 const { handleCalendarCommand, isCalendarCommand } = require('./handlers/calendar-handler');
+const { handleAudioWithClassification } = require('./handlers/meeting-handler');
 
 /**
  * Processa uma reunião enviada via texto (ou consolidada do histórico)
@@ -83,7 +85,13 @@ async function handleMessage(msg, client) {
             return;
         }
 
-        console.log('\n📩 Mensagem de texto processando:', msg.body);
+        console.log('\n📩 Mensagem processando:', msg.body || `[Mídia: ${msg.isAudio ? 'Áudio' : (msg.isVideo ? 'Vídeo' : 'Outra')}]`);
+
+        // --- INTERCEPTOR: Áudio e Vídeo ---
+        if (msg.isAudio || msg.isVideo) {
+            await handleAudioWithClassification(client, msg, chatId, handleMessage);
+            return;
+        }
 
         // --- INTERCEPTOR: Início de Reunião ---
         if (isMeetingStartRequest(msg.body)) {
@@ -108,6 +116,8 @@ async function handleMessage(msg, client) {
             }
             
             await handleTextMeeting(client, chatId, msg.body, historicoConsolidar);
+            cloneDigital.processConversationTurn(msg.body, 'Reunião salva no vault').catch(() => {});
+            cloneDigital.resetInactivityTimer();
             return;
         }
 
@@ -151,14 +161,18 @@ async function handleMessage(msg, client) {
             // Roteamento
             if (respostaIA.startsWith('/magisterium')) {
                 await handleMagisteriumCommand(client, chatId, respostaIA, historico);
+                cloneDigital.processConversationTurn(msg.body, respostaIA).catch(() => {});
+                cloneDigital.resetInactivityTimer();
                 return;
             }
 
             adicionarAoHistorico(chatId, 'model', [{ text: respostaFinal }]);
 
-            // Finance Handler 
+            // Finance Handler
             if (isFinanceCommand(respostaIA)) {
                 await handleFinanceCommand(client, chatId, respostaIA);
+                cloneDigital.processConversationTurn(msg.body, respostaIA).catch(() => {});
+                cloneDigital.resetInactivityTimer();
                 return;
             }
 
@@ -174,6 +188,8 @@ async function handleMessage(msg, client) {
                         await client.sendMessage(chatId, filtrarPensamentos(analiseOriginal));
                     }
                 }
+                cloneDigital.processConversationTurn(msg.body, respostaIA).catch(() => {});
+                cloneDigital.resetInactivityTimer();
                 return;
             }
 
@@ -182,8 +198,10 @@ async function handleMessage(msg, client) {
                 await client.sendMessage(chatId, respostaFinal);
             }
 
-            // Camada 3 (background): Extrai fatos e memoriza
+            // Camada 3 (background): Extrai fatos, mantém Clone Digital
             ragService.extrairEMemorizar(msg.body, respostaFinal, chatId).catch(() => {});
+            cloneDigital.processConversationTurn(msg.body, respostaFinal).catch(() => {});
+            cloneDigital.resetInactivityTimer();
 
         } else {
             const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';

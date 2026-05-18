@@ -3,13 +3,16 @@ const {
     useMultiFileAuthState, 
     DisconnectReason, 
     fetchLatestBaileysVersion, 
-    makeCacheableSignalKeyStore 
+    makeCacheableSignalKeyStore,
+    downloadMediaMessage
 } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const path = require('path');
 const fs = require('fs');
 const { handleMessage } = require('./message-handler');
+const { iniciarVerificacaoLembretes } = require('../reminders/reminders');
+const { iniciarScheduler } = require('../jobs/scheduler');
 
 const logger = pino({ level: 'silent' });
 
@@ -56,6 +59,17 @@ async function connectToWhatsApp() {
             }
         } else if (connection === 'open') {
             console.log('✅ JARVIS CONECTADO COM SUCESSO VIA BAILEYS!');
+
+            // Cliente persistente para serviços em background (lembretes, scheduler)
+            const bgClient = {
+                sendMessage: async (jid, text) => {
+                    await sock.sendMessage(jid, { text });
+                }
+            };
+
+            // Inicia sistema de lembretes e jobs agendados
+            iniciarVerificacaoLembretes(bgClient);
+            iniciarScheduler(bgClient);
         }
     });
 
@@ -67,14 +81,25 @@ async function connectToWhatsApp() {
         if (m.type === 'notify') {
             for (const msg of m.messages) {
                 if (!msg.key.fromMe && msg.message) {
+                    // Detecta tipo de mensagem
+                    const isAudio = !!msg.message.audioMessage;
+                    const isVideo = !!msg.message.videoMessage;
+                    const isImage = !!msg.message.imageMessage;
+                    const isDocument = !!msg.message.documentMessage;
+
                     // Traduz o formato do Baileys para o formato simplificado que o resto do Jarvis entende
                     const convertedMsg = {
                         from: msg.key.remoteJid,
                         body: msg.message.conversation || 
                               msg.message.extendedTextMessage?.text || 
                               msg.message.imageMessage?.caption || 
+                              msg.message.videoMessage?.caption ||
                               '',
                         pushName: msg.pushName,
+                        isAudio,
+                        isVideo,
+                        isImage,
+                        isDocument,
                         original: msg // Mantém o original guardado se precisar
                     };
 
@@ -82,6 +107,24 @@ async function connectToWhatsApp() {
                     const clientAdapter = {
                         sendMessage: async (jid, text) => {
                             await sock.sendMessage(jid, { text });
+                        },
+                        downloadMedia: async (msgOriginal) => {
+                            const buffer = await downloadMediaMessage(
+                                msgOriginal,
+                                'buffer',
+                                {},
+                                { 
+                                    logger: pino({ level: 'silent' }),
+                                    reacquireStep: 3
+                                }
+                            );
+                            return {
+                                data: buffer.toString('base64'),
+                                mimetype: msgOriginal.message.audioMessage?.mimetype || 
+                                          msgOriginal.message.videoMessage?.mimetype || 
+                                          msgOriginal.message.imageMessage?.mimetype || 
+                                          'application/octet-stream'
+                            };
                         }
                     };
 

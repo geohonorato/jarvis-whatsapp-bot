@@ -47,3 +47,20 @@ process.on('uncaughtException', (err) => {
 process.on('unhandledRejection', (reason) => {
     console.error('💥 unhandledRejection:', reason?.stack || reason?.message || reason);
 });
+
+// Finaliza sessão do Clone Digital ao desligar
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`\n🛑 Recebido ${signal} — finalizando Clone Digital...`);
+    try {
+        const cloneDigital = require('./services/knowledge/clone-digital');
+        await cloneDigital.finalizeSession();
+    } catch (e) {
+        // Silencioso — módulo pode não estar carregado
+    }
+    process.exit(0);
+}
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));

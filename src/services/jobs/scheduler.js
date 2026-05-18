@@ -1,11 +1,24 @@
-const { checkPrices } = require('../crawler/price-watcher');
-const { verificarAnaliseFinanceiraMensal } = require('./monthly-finance-job');
+// Crawler de preços foi removido na refatoração (abril/2026)
+let checkPrices = null;
+try {
+    checkPrices = require('../crawler/price-watcher').checkPrices;
+} catch (e) {
+    console.log('ℹ️ Crawler de preços indisponível (módulo removido)');
+}
+
+// Job financeiro mensal depende de whatsapp-web.js (não compatível com Baileys)
+let verificarAnaliseFinanceiraMensal = null;
+try {
+    verificarAnaliseFinanceiraMensal = require('./monthly-finance-job').verificarAnaliseFinanceiraMensal;
+} catch (e) {
+    console.log('ℹ️ Job financeiro mensal indisponível:', e.message);
+}
 
 let jobsInterval = null;
 let monthlyInterval = null;
 
 /**
- * Inicia os Jobs agendados (Crawler, Lembretes, etc)
+ * Inicia os Jobs agendados (Crawler, Análise Financeira Mensal)
  * @param {Client} client - Cliente WhatsApp autenticado
  */
 function iniciarScheduler(client) {
@@ -14,35 +27,33 @@ function iniciarScheduler(client) {
         return;
     }
 
-    console.log('⏰ Scheduler iniciado: Crawler de Preços (30min) + Análise Financeira Mensal');
+    const modulos = [];
+    if (checkPrices) modulos.push('Crawler de Preços (30min)');
+    if (verificarAnaliseFinanceiraMensal) modulos.push('Análise Financeira Mensal');
+    console.log(`⏰ Scheduler iniciado: ${modulos.length > 0 ? modulos.join(' + ') : 'nenhum job adicional disponível'}`);
 
-    // Executa imediatamente uma vez
-    runJobs(client);
-
-    // Configura intervalo de 30 minutos para crawler
-    jobsInterval = setInterval(() => {
+    // Crawler de preços (se disponível)
+    if (checkPrices) {
         runJobs(client);
-    }, 30 * 60 * 1000);
+        jobsInterval = setInterval(() => runJobs(client), 30 * 60 * 1000);
+    }
 
-    // Verifica job mensal a cada minuto
-    monthlyInterval = setInterval(() => {
+    // Job financeiro mensal (se disponível)
+    if (verificarAnaliseFinanceiraMensal) {
         verificarAnaliseFinanceiraMensal(client);
-    }, 60 * 1000);
-
-    // Verifica job mensal imediatamente
-    verificarAnaliseFinanceiraMensal(client);
+        monthlyInterval = setInterval(() => {
+            verificarAnaliseFinanceiraMensal(client);
+        }, 60 * 1000);
+    }
 }
 
 async function runJobs(client) {
     try {
-        // --- 1. Crawler de Preços ---
         const alerts = await checkPrices();
-
         if (alerts && alerts.length > 0) {
             console.log(`📢 Enviando ${alerts.length} alertas de preço...`);
             for (const alert of alerts) {
                 await client.sendMessage(alert.chatId, alert.message);
-                // Pequeno delay para evitar flood
                 await new Promise(r => setTimeout(r, 1000));
             }
         }
