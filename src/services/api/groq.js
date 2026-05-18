@@ -20,10 +20,10 @@ console.log(`🧠 Provider de IA: ${providerName}`);
 
 // Cliente HTTP configurado para o provider ativo
 const aiClient = axios.create({
-    baseURL: useDeepSeek 
+    baseURL: useDeepSeek
         ? 'https://api.deepseek.com/v1'
         : 'https://api.groq.com/openai/v1',
-    timeout: 90000, // 90s (DeepSeek pode ser mais lento que Groq)
+    timeout: 120000, // 120s (DeepSeek v4 com thinking pode ser mais lento)
     headers: {
         'Authorization': `Bearer ${useDeepSeek ? DEEPSEEK_API_KEY : GROQ_API_KEY}`,
         'Content-Type': 'application/json'
@@ -33,11 +33,13 @@ const aiClient = axios.create({
 
 // Configurações do modelo
 const defaultOptions = {
-    model: useDeepSeek ? "deepseek-chat" : "llama-3.3-70b-versatile",
+    model: useDeepSeek ? "deepseek-v4-pro" : "llama-3.3-70b-versatile",
     temperature: 0.6,
-    max_tokens: 4096, // Reduzido de 8192 para economizar tokens na resposta
+    max_tokens: 4096,
     top_p: 1,
-    stop: null
+    stop: null,
+    // Thinking mode ativado pra respostas mais profundas
+    ...(useDeepSeek ? { thinking: { type: "enabled" }, reasoning_effort: "medium" } : {})
 };
 
 console.log(`📦 Modelo: ${defaultOptions.model}`);

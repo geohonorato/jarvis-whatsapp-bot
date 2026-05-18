@@ -64,6 +64,9 @@ async function connectToWhatsApp() {
             const bgClient = {
                 sendMessage: async (jid, text) => {
                     await sock.sendMessage(jid, { text });
+                },
+                sendTyping: async (jid) => {
+                    await sock.sendPresenceUpdate('composing', jid);
                 }
             };
 
@@ -107,6 +110,9 @@ async function connectToWhatsApp() {
                     const clientAdapter = {
                         sendMessage: async (jid, text) => {
                             await sock.sendMessage(jid, { text });
+                        },
+                        sendTyping: async (jid) => {
+                            await sock.sendPresenceUpdate('composing', jid);
                         },
                         downloadMedia: async (msgOriginal) => {
                             const buffer = await downloadMediaMessage(

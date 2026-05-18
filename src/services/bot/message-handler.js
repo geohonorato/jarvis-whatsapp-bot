@@ -151,6 +151,9 @@ async function handleMessage(msg, client) {
         
         const textoComContexto = [{ text: promptText }];
 
+        // Mostra "digitando..." no WhatsApp
+        client.sendTyping(chatId).catch(() => {});
+
         console.time('🤖 Tempo API');
         const respostaIA = await processarMensagemMultimodal(textoComContexto, historico);
         console.timeEnd('🤖 Tempo API');

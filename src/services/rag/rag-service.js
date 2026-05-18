@@ -9,8 +9,8 @@ const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const MEMORIES_FILE = path.join(__dirname, '../../../data/memories.json');
 
 // Usa DeepSeek se disponível, senão Groq com modelo barato
-const extractorConfig = DEEPSEEK_API_KEY 
-    ? { url: 'https://api.deepseek.com/v1', key: DEEPSEEK_API_KEY, model: 'deepseek-chat' }
+const extractorConfig = DEEPSEEK_API_KEY
+    ? { url: 'https://api.deepseek.com/v1', key: DEEPSEEK_API_KEY, model: 'deepseek-v4-flash' }
     : { url: 'https://api.groq.com/openai/v1', key: GROQ_API_KEY, model: 'llama-3.1-8b-instant' };
 
 // --- Cosine Similarity ---
