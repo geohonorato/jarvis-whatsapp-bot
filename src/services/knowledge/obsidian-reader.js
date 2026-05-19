@@ -197,7 +197,11 @@ function getTodaySessionDiary() {
             if (feitos) {
                 // Só as primeiras 3 entradas pra economizar tokens (~100 chars)
                 const bullets = feitos[1].trim().split('\n').filter(l => l.startsWith('-')).slice(0, 3);
-                resumo = `Hoje: ${bullets.map(b => b.replace(/^- \*\*/, '').replace(/\*\*:.*/, '').trim()).join('; ')}`;
+                resumo = `Hoje: ${bullets.map(b => {
+                    // Extrai só o texto entre ** ... ** (título em negrito)
+                    const match = b.match(/\*\*([^*]+)\*\*/);
+                    return match ? match[1] : b.replace(/^- /, '').substring(0, 60);
+                }).join('; ')}`;
             }
             _sessionDiaryCache = resumo;
             _sessionDiaryCacheTime = agora;
