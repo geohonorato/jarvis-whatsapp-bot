@@ -159,14 +159,15 @@ class RagService {
     _syncToObsidian(fact, dateObj = new Date()) {
         try {
             const vaultPath = process.env.OBSIDIAN_VAULT_PATH || process.env.VAULT_PATH || (
-                process.platform === 'win32' 
-                    ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault' 
+                process.platform === 'win32'
+                    ? 'C:\\Users\\Geovanni\\Documents\\Obsidian Vault'
                     : '/home/ubuntu/obsidian-vault'
             );
             if (!vaultPath) return;
 
             const cloneDir = path.join(vaultPath, '20 - Áreas', 'Clone Digital');
             const fatosFile = path.join(cloneDir, 'Fatos do Jarvis.md');
+            const indexFile = path.join(cloneDir, 'Memórias.md');
 
             const pad = (n) => n.toString().padStart(2, '0');
             const dataLink = `[[${dateObj.toISOString().split('T')[0]}]]`;
@@ -176,12 +177,29 @@ class RagService {
                 fs.mkdirSync(cloneDir, { recursive: true });
             }
 
+            // Fatos do Jarvis (completo)
             if (!fs.existsSync(fatosFile)) {
                 const header = `---\nname: Fatos do Jarvis\ndescription: Base de conhecimento permanente extraída automaticamente de conversas\ntype: memórias\n---\n\n# 🧠 Fatos do Jarvis\n\n> Base de conhecimento permanente extraída passivamente das conversas.\n\n`;
                 fs.writeFileSync(fatosFile, header, 'utf-8');
             }
-
             fs.appendFileSync(fatosFile, bullet, 'utf-8');
+
+            // Memórias.md — índice leve (1 linha por fato, ~100 chars)
+            if (!fs.existsSync(indexFile)) {
+                fs.writeFileSync(indexFile, `---\nname: Memórias\ndescription: Índice leve de memórias — carregado sempre, expandido sob demanda\ntype: índice\n---\n\n# 🧠 Memórias\n\n> Índice de fatos disponíveis. Leve, injetado a cada mensagem.\n\n`, 'utf-8');
+            }
+            const shortFact = fact.length > 80 ? fact.substring(0, 80) + '...' : fact;
+            fs.appendFileSync(indexFile, `- ${shortFact}\n`, 'utf-8');
+
+            // Mantém índice enxuto: máximo 30 linhas
+            const lines = fs.readFileSync(indexFile, 'utf-8').split('\n');
+            const contentLines = lines.filter(l => l.startsWith('- '));
+            if (contentLines.length > 30) {
+                const headerLines = lines.slice(0, lines.findIndex(l => l.startsWith('- ')));
+                const kept = contentLines.slice(-30);
+                fs.writeFileSync(indexFile, [...headerLines, ...kept, ''].join('\n'), 'utf-8');
+            }
+
             console.log(`📝 [RAG] Fato sincronizado com Obsidian: ${fact.substring(0, 30)}...`);
         } catch (e) {
             console.error('❌ Erro ao sincronizar com Obsidian:', e.message);

@@ -140,6 +140,37 @@ function getRecentSessionDates() {
 }
 
 /**
+ * Carrega o índice de memórias (cache de 10 min, similar ao MEMORY.md)
+ */
+let _memoryIndexCache = null;
+let _memoryIndexCacheTime = 0;
+const MEMORY_INDEX_CACHE_TTL = 10 * 60 * 1000;
+
+function getMemoryIndex() {
+    const agora = Date.now();
+    if (_memoryIndexCache && (agora - _memoryIndexCacheTime) < MEMORY_INDEX_CACHE_TTL) {
+        return _memoryIndexCache;
+    }
+
+    try {
+        const indexPath = path.join(VAULT_PATH, '20 - Áreas', 'Clone Digital', 'Memórias.md');
+        if (fs.existsSync(indexPath)) {
+            const content = fs.readFileSync(indexPath, 'utf-8');
+            // Pega só as linhas com "- " (índice), ignora cabeçalho
+            const lines = content.split('\n').filter(l => l.startsWith('- '));
+            _memoryIndexCache = lines.length > 0 ? lines.join('\n') : '';
+            _memoryIndexCacheTime = agora;
+            return _memoryIndexCache;
+        }
+    } catch (e) {
+        // Silencioso
+    }
+    _memoryIndexCache = '';
+    _memoryIndexCacheTime = agora;
+    return '';
+}
+
+/**
  * Busca o diário de sessão de hoje (cache de 5 min)
  */
 let _sessionDiaryCache = null;
@@ -153,7 +184,6 @@ function getTodaySessionDiary() {
     }
 
     try {
-        // Usa fuso horário brasileiro — servidor OCI roda em UTC
         const parts = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date());
         const todayStr = `${parts.find(p => p.type === 'day').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'year').value}`;
         const filename = `Sessão — ${todayStr}.md`;
@@ -162,18 +192,19 @@ function getTodaySessionDiary() {
 
         if (result) {
             const content = fs.readFileSync(result, 'utf-8');
-            // Pega só "O que foi feito" e "Decisões tomadas" pra economizar tokens
             const feitos = content.match(/## O que foi feito\n([\s\S]*?)(?=\n##|$)/);
-            const decisoes = content.match(/## Decisões tomadas\n([\s\S]*?)(?=\n##|$)/);
             let resumo = '';
-            if (feitos) resumo += `O que foi feito hoje:\n${feitos[1].trim()}\n`;
-            if (decisoes && decisoes[1].trim() !== '-') resumo += `Decisões de hoje: ${decisoes[1].trim()}`;
+            if (feitos) {
+                // Só as primeiras 3 entradas pra economizar tokens (~100 chars)
+                const bullets = feitos[1].trim().split('\n').filter(l => l.startsWith('-')).slice(0, 3);
+                resumo = `Hoje: ${bullets.map(b => b.replace(/^- \*\*/, '').replace(/\*\*:.*/, '').trim()).join('; ')}`;
+            }
             _sessionDiaryCache = resumo;
             _sessionDiaryCacheTime = agora;
             return resumo;
         }
     } catch (e) {
-        // Silencioso — diário pode não existir ainda
+        // Silencioso
     }
     _sessionDiaryCache = '';
     _sessionDiaryCacheTime = agora;
@@ -193,17 +224,22 @@ function buildSmartContext(mensagemUsuario) {
         context += '=== PERFIL DO CRIADOR ===\n' + perfil + '\n\n';
     }
 
-    // 2. Diário de sessão de hoje (sempre, pra manter continuidade entre Claude Code e Jarvis)
+    // 2. Resumo da sessão de hoje (1 linha, ~100 chars — econômico)
     const sessao = getTodaySessionDiary();
     if (sessao) {
-        context += `=== SESSÃO DE HOJE ===\n${sessao}\n\n`;
-        console.log(`📔 Sessão do dia injetada no contexto`);
+        context += `=== HOJE ===\n${sessao}\n\n`;
     }
 
     // 2.1 Lista de dias com sessão (evita alucinação de datas)
     const sessoesRecentes = getRecentSessionDates();
     if (sessoesRecentes.length > 0) {
-        context += `=== DIAS COM SESSÃO REGISTRADA (últimos 7) ===\n${sessoesRecentes.join(', ')}\n(Se o usuário perguntar sobre um dia que não está nesta lista, diga que não há registro.)\n\n`;
+        context += `=== SESSÕES RECENTES ===\n${sessoesRecentes.join(', ')}\n\n`;
+    }
+
+    // 2.2 Índice de memórias (leve, 1 linha por fato — similar ao MEMORY.md do Claude Code)
+    const memoriasIdx = getMemoryIndex();
+    if (memoriasIdx) {
+        context += `=== MEMÓRIAS DISPONÍVEIS ===\n${memoriasIdx}\n\n`;
     }
 
     // 3. RAG sob demanda: só busca se a mensagem pedir

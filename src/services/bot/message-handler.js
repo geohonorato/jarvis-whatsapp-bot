@@ -1,4 +1,4 @@
-const { adicionarAoHistorico, obterHistorico, limparHistorico, obterHistoricoDesde } = require('../chat/chat-history');
+const { adicionarAoHistorico, obterHistorico, limparHistorico, obterHistoricoDesde, needsCompaction, getCompactionPayload, applyCompaction } = require('../chat/chat-history');
 const { processarMensagemMultimodal, filtrarPensamentos } = require('../api/groq');
 const { buildSmartContext } = require('../knowledge/obsidian-reader');
 const ragService = require('../rag/rag-service');
@@ -64,6 +64,50 @@ async function handleTextMeeting(client, chatId, text, history = []) {
         console.error('❌ Erro no handleTextMeeting:', error);
         await client.sendMessage(chatId, '❌ Erro ao processar o salvamento da reunião.');
         return false;
+    }
+}
+
+/**
+ * Compacta histórico da conversa quando atinge 12+ mensagens.
+ * Resume as mensagens antigas em 1 parágrafo via DeepSeek v4-flash,
+ * mantendo só as últimas 6 mensagens intactas.
+ */
+async function compactarSeNecessario(chatId) {
+    try {
+        if (!needsCompaction(chatId)) return;
+
+        const payload = getCompactionPayload(chatId);
+        if (!payload) return;
+
+        const DEEPSEEK_KEY = process.env.DEEPSEEK_API_KEY;
+        if (!DEEPSEEK_KEY) return;
+
+        const axios = require('axios');
+        const response = await axios.post('https://api.deepseek.com/v1/chat/completions', {
+            model: 'deepseek-v4-flash',
+            temperature: 0,
+            max_tokens: 300,
+            messages: [{
+                role: 'system',
+                content: 'Resuma esta conversa em português brasileiro em no máximo 3 frases. Apenas fatos e decisões relevantes. Nada de floreios.'
+            }, {
+                role: 'user',
+                content: `${payload.existingSummary ? 'Resumo anterior:\n' + payload.existingSummary + '\n\n' : ''}Novas mensagens:\n${payload.lines}`
+            }]
+        }, {
+            headers: {
+                'Authorization': `Bearer ${DEEPSEEK_KEY}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 10000
+        });
+
+        const summary = response.data.choices[0]?.message?.content?.trim();
+        if (summary) {
+            applyCompaction(chatId, summary);
+        }
+    } catch (e) {
+        // Silencioso — compactação falha não afeta o usuário
     }
 }
 
@@ -204,10 +248,11 @@ async function handleMessage(msg, client) {
                 await client.sendMessage(chatId, respostaFinal);
             }
 
-            // Camada 3 (background): Extrai fatos, mantém Clone Digital
+            // Camada 3 (background): Extrai fatos, mantém Clone Digital, compacta histórico
             ragService.extrairEMemorizar(msg.body, respostaFinal, chatId).catch(() => {});
             cloneDigital.processConversationTurn(msg.body, respostaFinal).catch(() => {});
             cloneDigital.resetInactivityTimer();
+            compactarSeNecessario(chatId).catch(() => {});
 
         } else {
             const mensagemErro = respostaIA || '❌ Desculpe, não consegui processar sua solicitação.';

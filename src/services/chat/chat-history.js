@@ -11,7 +11,58 @@ const chatMetadata = new Map(); // Armazena metadata (timestamp, etc)
 
 const MAX_MESSAGES = config.cache.maxHistoryMessages;
 const MAX_AGE = config.cache.maxHistoryAge;
+const COMPACTION_THRESHOLD = 12; // Compacta quando atinge 12 mensagens
+const KEEP_RECENT = 6; // Mantém as últimas 6 mensagens intactas
 const log = logger.child('ChatHistory');
+
+// Sumário compactado por chat (acumulativo)
+const compactedSummaries = new Map();
+
+/**
+ * Verifica se o chat precisa de compactação
+ */
+function needsCompaction(chatId) {
+    const historico = chatHistory.get(chatId);
+    return historico && historico.length >= COMPACTION_THRESHOLD;
+}
+
+/**
+ * Retorna as mensagens antigas prontas pra sumarização via IA.
+ * Retorna null se não precisar compactar.
+ */
+function getCompactionPayload(chatId) {
+    const historico = chatHistory.get(chatId);
+    if (!historico || historico.length < COMPACTION_THRESHOLD) return null;
+
+    const oldMessages = historico.slice(0, historico.length - KEEP_RECENT);
+    const existingSummary = compactedSummaries.get(chatId) || '';
+
+    const lines = oldMessages.map(m => {
+        const role = m.role === 'user' ? 'Geovanni' : 'Jarvis';
+        const text = m.parts.map(p => p.text || '').join(' ');
+        return `${role}: ${text}`;
+    }).join('\n');
+
+    return { lines, existingSummary };
+}
+
+/**
+ * Aplica a compactação: remove mensagens antigas e guarda o sumário
+ */
+function applyCompaction(chatId, newSummary) {
+    const historico = chatHistory.get(chatId);
+    if (!historico) return;
+
+    // Remove as mensagens antigas (mantém só as KEEP_RECENT mais recentes)
+    const recentMessages = historico.slice(-KEEP_RECENT);
+    chatHistory.set(chatId, recentMessages);
+
+    // Atualiza o sumário acumulativo
+    const existing = compactedSummaries.get(chatId) || '';
+    compactedSummaries.set(chatId, existing ? `${existing}\n${newSummary}` : newSummary);
+
+    console.log(`📦 [Compactação] ${chatId}: ${historico.length} → ${recentMessages.length} mensagens. Sumário acumulado: ${compactedSummaries.get(chatId).length} chars`);
+}
 
 /**
  * Adiciona mensagem ao histórico com limpeza automática
@@ -72,10 +123,21 @@ function obterHistorico(chatId) {
     }
 
     // Retorna sem os timestamps para compatibilidade com código existente
-    return filtered.map(msg => ({
+    const messages = filtered.map(msg => ({
         role: msg.role,
         parts: msg.parts,
     }));
+
+    // Prepend sumário compactado se existir (economiza tokens)
+    const summary = compactedSummaries.get(chatId);
+    if (summary) {
+        messages.unshift({
+            role: 'system',
+            parts: [{ text: `[RESUMO DA CONVERSA ANTERIOR]\n${summary}\n[/RESUMO]` }]
+        });
+    }
+
+    return messages;
 }
 
 /**
@@ -176,4 +238,7 @@ module.exports = {
     limparHistorico,
     limparHistoricosInativos,
     obterEstatisticas,
+    needsCompaction,
+    getCompactionPayload,
+    applyCompaction,
 }; 
