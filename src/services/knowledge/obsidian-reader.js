@@ -102,20 +102,66 @@ function readSpecificNote(searchName) {
 }
 
 /**
+ * Busca o diário de sessão de hoje (cache de 5 min)
+ */
+let _sessionDiaryCache = null;
+let _sessionDiaryCacheTime = 0;
+const SESSION_CACHE_TTL = 5 * 60 * 1000;
+
+function getTodaySessionDiary() {
+    const agora = Date.now();
+    if (_sessionDiaryCache && (agora - _sessionDiaryCacheTime) < SESSION_CACHE_TTL) {
+        return _sessionDiaryCache;
+    }
+
+    try {
+        const d = new Date();
+        const todayStr = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+        const filename = `Sessão — ${todayStr}.md`;
+        const folder = '20 - Áreas/Clone Digital/Diário de Sessões';
+        const result = findFileRecursive(path.join(VAULT_PATH, folder), filename);
+
+        if (result) {
+            const content = fs.readFileSync(result, 'utf-8');
+            // Pega só "O que foi feito" e "Decisões tomadas" pra economizar tokens
+            const feitos = content.match(/## O que foi feito\n([\s\S]*?)(?=\n##|$)/);
+            const decisoes = content.match(/## Decisões tomadas\n([\s\S]*?)(?=\n##|$)/);
+            let resumo = '';
+            if (feitos) resumo += `O que foi feito hoje:\n${feitos[1].trim()}\n`;
+            if (decisoes && decisoes[1].trim() !== '-') resumo += `Decisões de hoje: ${decisoes[1].trim()}`;
+            _sessionDiaryCache = resumo;
+            _sessionDiaryCacheTime = agora;
+            return resumo;
+        }
+    } catch (e) {
+        // Silencioso — diário pode não existir ainda
+    }
+    _sessionDiaryCache = '';
+    _sessionDiaryCacheTime = agora;
+    return '';
+}
+
+/**
  * Pipeline inteligente de RAG: só injeta contexto quando necessário
- * Custo médio: ~500 tokens (perfil) + 0-500 tokens (nota sob demanda)
- * vs. antigo: ~5000 tokens fixos a cada mensagem
+ * 3 camadas: Perfil (sempre) + Sessão do dia (sempre) + Nota sob demanda
  */
 function buildSmartContext(mensagemUsuario) {
     let context = '';
-    
+
     // 1. Perfil sempre presente (condensado, cacheado)
     const perfil = getPerfilCondensado();
     if (perfil) {
         context += '=== PERFIL DO CRIADOR ===\n' + perfil + '\n\n';
     }
 
-    // 2. RAG sob demanda: só busca se a mensagem pedir
+    // 2. Diário de sessão de hoje (sempre, pra manter continuidade entre Claude Code e Jarvis)
+    const sessao = getTodaySessionDiary();
+    if (sessao) {
+        context += `=== SESSÃO DE HOJE ===\n${sessao}\n\n`;
+        console.log(`📔 Sessão do dia injetada no contexto`);
+    }
+
+    // 3. RAG sob demanda: só busca se a mensagem pedir
     const searchTerm = detectarNecessidadeRAG(mensagemUsuario);
     if (searchTerm) {
         console.log(`🔍 RAG ativado: buscando "${searchTerm}" no vault...`);

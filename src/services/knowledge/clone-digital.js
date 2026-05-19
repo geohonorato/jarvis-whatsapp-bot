@@ -25,7 +25,7 @@ const aiConfig = DEEPSEEK_API_KEY
 let sessionActive = false;
 let sessionDate = null;
 let messageCount = 0;
-const ANALYZE_EVERY_N_MESSAGES = 5; // Só chama IA de análise a cada 5 mensagens
+const ANALYZE_EVERY_N_MESSAGES = 3; // Só chama IA de análise a cada 3 mensagens
 const pendingFacts = []; // Acumula fatos entre análises
 
 function getTodayStr() {

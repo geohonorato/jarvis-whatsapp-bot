@@ -37,9 +37,7 @@ const defaultOptions = {
     temperature: 0.6,
     max_tokens: 4096,
     top_p: 1,
-    stop: null,
-    // Thinking mode ativado pra respostas mais profundas
-    ...(useDeepSeek ? { thinking: { type: "enabled" }, reasoning_effort: "medium" } : {})
+    stop: null
 };
 
 console.log(`📦 Modelo: ${defaultOptions.model}`);
