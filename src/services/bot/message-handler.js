@@ -197,6 +197,9 @@ async function handleMessage(msg, client) {
             }
 
             if (respostaFinal && respostaFinal.trim().length > 0) {
+                // Para o "digitando..." antes de enviar a resposta
+                client.clearTyping(chatId).catch(() => {});
+                await new Promise(r => setTimeout(r, 200));
                 console.log('🤖 Resposta enviada:', respostaFinal);
                 await client.sendMessage(chatId, respostaFinal);
             }

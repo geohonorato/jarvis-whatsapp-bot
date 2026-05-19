@@ -114,6 +114,9 @@ async function connectToWhatsApp() {
                         sendTyping: async (jid) => {
                             await sock.sendPresenceUpdate('composing', jid);
                         },
+                        clearTyping: async (jid) => {
+                            await sock.sendPresenceUpdate('paused', jid);
+                        },
                         downloadMedia: async (msgOriginal) => {
                             const buffer = await downloadMediaMessage(
                                 msgOriginal,
