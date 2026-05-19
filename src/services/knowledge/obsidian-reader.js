@@ -153,8 +153,9 @@ function getTodaySessionDiary() {
     }
 
     try {
-        const d = new Date();
-        const todayStr = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+        // Usa fuso horário brasileiro — servidor OCI roda em UTC
+        const parts = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date());
+        const todayStr = `${parts.find(p => p.type === 'day').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'year').value}`;
         const filename = `Sessão — ${todayStr}.md`;
         const folder = '20 - Áreas/Clone Digital/Diário de Sessões';
         const result = findFileRecursive(path.join(VAULT_PATH, folder), filename);

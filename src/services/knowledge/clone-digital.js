@@ -29,8 +29,9 @@ const ANALYZE_EVERY_N_MESSAGES = 3; // Só chama IA de análise a cada 3 mensage
 const pendingFacts = []; // Acumula fatos entre análises
 
 function getTodayStr() {
-    const d = new Date();
-    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+    // Usa fuso horário brasileiro — servidor OCI roda em UTC
+    const parts = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(new Date());
+    return `${parts.find(p => p.type === 'day').value}-${parts.find(p => p.type === 'month').value}-${parts.find(p => p.type === 'year').value}`;
 }
 
 function getSessionDiaryPath() {
