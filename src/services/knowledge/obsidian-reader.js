@@ -102,6 +102,44 @@ function readSpecificNote(searchName) {
 }
 
 /**
+ * Lista os últimos dias que têm sessão registrada (cache de 1h)
+ */
+let _recentSessionsCache = null;
+let _recentSessionsCacheTime = 0;
+const SESSIONS_LIST_CACHE_TTL = 60 * 60 * 1000;
+
+function getRecentSessionDates() {
+    const agora = Date.now();
+    if (_recentSessionsCache && (agora - _recentSessionsCacheTime) < SESSIONS_LIST_CACHE_TTL) {
+        return _recentSessionsCache;
+    }
+
+    try {
+        const sessionsDir = path.join(VAULT_PATH, '20 - Áreas', 'Clone Digital', 'Diário de Sessões');
+        if (!fs.existsSync(sessionsDir)) {
+            _recentSessionsCache = [];
+            _recentSessionsCacheTime = agora;
+            return [];
+        }
+
+        const files = fs.readdirSync(sessionsDir)
+            .filter(f => f.startsWith('Sessão — ') && f.endsWith('.md'))
+            .map(f => f.replace('Sessão — ', '').replace('.md', ''))
+            .sort()
+            .reverse()
+            .slice(0, 7); // Últimos 7 dias
+
+        _recentSessionsCache = files;
+        _recentSessionsCacheTime = agora;
+        return files;
+    } catch (e) {
+        _recentSessionsCache = [];
+        _recentSessionsCacheTime = agora;
+        return [];
+    }
+}
+
+/**
  * Busca o diário de sessão de hoje (cache de 5 min)
  */
 let _sessionDiaryCache = null;
@@ -159,6 +197,12 @@ function buildSmartContext(mensagemUsuario) {
     if (sessao) {
         context += `=== SESSÃO DE HOJE ===\n${sessao}\n\n`;
         console.log(`📔 Sessão do dia injetada no contexto`);
+    }
+
+    // 2.1 Lista de dias com sessão (evita alucinação de datas)
+    const sessoesRecentes = getRecentSessionDates();
+    if (sessoesRecentes.length > 0) {
+        context += `=== DIAS COM SESSÃO REGISTRADA (últimos 7) ===\n${sessoesRecentes.join(', ')}\n(Se o usuário perguntar sobre um dia que não está nesta lista, diga que não há registro.)\n\n`;
     }
 
     // 3. RAG sob demanda: só busca se a mensagem pedir
