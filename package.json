@@ -28,7 +28,9 @@
     "node-cron": "^4.2.1",
     "pluggy-sdk": "^0.83.0",
     "sqlite3": "^5.1.7",
-    "@huggingface/transformers": "^3.5.1"
+    "@huggingface/transformers": "^3.5.1",
+    "express": "^4.21.0",
+    "cors": "^2.8.5"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

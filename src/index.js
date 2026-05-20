@@ -18,6 +18,7 @@ require('./services/finance/finance-tracker'); // Executa a iniciação do banco
 // Inicializa RAG vetorial e indexação do Vault
 const ragService = require('./services/rag/rag-service');
 const { indexarVault } = require('./services/rag/vault-indexer');
+const { startApiServer } = require('./services/bot/api-server');
 
 ragService.initialize().then(() => {
     // Indexa o vault na primeira subida (background)
@@ -35,6 +36,9 @@ const { connectToWhatsApp } = require('./services/bot/baileys');
 connectToWhatsApp().catch(err => {
     console.error("❌ Falha crítica na inicialização do Baileys:", err);
 });
+
+// Inicializa API HTTP para interfaces externas (Watch, Dashboard)
+startApiServer();
 
 setInterval(() => {
     console.log(`💓 Heartbeat | uptime=${process.uptime().toFixed(0)}s | memory=${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB`);
